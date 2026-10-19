@@ -1,6 +1,7 @@
 package dev.juanse.tiktokmobs.plugin.runtime;
 
 import dev.juanse.tiktokmobs.core.ActionResolver;
+import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -39,23 +40,27 @@ public final class LedgerStore {
         try {
             YamlConfiguration yaml = YamlConfiguration.loadConfiguration(archivo);
 
-            Map<String, Integer> donantes = new LinkedHashMap<>();
-            if (yaml.isConfigurationSection("donors")) {
-                for (String nombre : yaml.getConfigurationSection("donors").getKeys(false)) {
-                    donantes.put(nombre, yaml.getInt("donors." + nombre, 0));
+            // Dos formatos conviven:
+            //  - El plano, de los primeros meses: 'chaos-level', 'chaos-donations' y 'donors.*'
+            //    sueltos. Es el live "main".
+            //  - El nuevo, con un bloque 'streamers.<id>.*' por live.
+            // Si existe el bloque nuevo, se usa; si no, se cae al plano para no perder nada
+            // en el primer arranque despues de actualizar el plugin.
+            int lives = 0;
+            if (yaml.isConfigurationSection("streamers")) {
+                ConfigurationSection seccion = yaml.getConfigurationSection("streamers");
+                for (String streamerId : seccion.getKeys(false)) {
+                    loadStreamer(seccion.getConfigurationSection(streamerId), streamerId);
+                    lives++;
                 }
+            } else {
+                loadLegacy(yaml);
+                lives = 1;
             }
 
-            resolver.ledger().restore(donantes);
-            resolver.likes().restore(yaml.getInt("likes", 0));
-            // El caos es acumulado del live: si se reinicia el servidor a mitad, volver a
-            // nivel 0 le quita a la gente lo que ya habia pagado entre todos.
-            resolver.chaos().restore(
-                    yaml.getInt("chaos-donations", 0),
-                    yaml.getInt("chaos-level", 0));
-
-            // Los regalos aprendidos: id -> nombre y monedas. Sin esto, el panel enseña
-            // los ids pelados tras cada reinicio y no hay forma de saber cuál es la rosa.
+            // Los regalos aprendidos: id -> nombre y monedas. Globales, iguales que GiftRegistry.
+            // Sin esto, el panel enseña los ids pelados tras cada reinicio y no hay forma de
+            // saber cual es la rosa.
             int regalos = 0;
             if (yaml.isConfigurationSection("gifts-vistos")) {
                 var seccion = yaml.getConfigurationSection("gifts-vistos");
@@ -75,14 +80,47 @@ public final class LedgerStore {
             }
 
             plugin.getLogger().info("[ledger] " + regalos + " regalo(s) conocidos recuperados");
-            plugin.getLogger().info("[ledger] recuperado: "
-                    + resolver.ledger().totalCoins() + " monedas, "
-                    + donantes.size() + " donantes, "
-                    + resolver.likes().total() + " likes, caos nivel "
-                    + resolver.chaos().level());
+            plugin.getLogger().info("[ledger] recuperado: " + lives + " live(s), "
+                    + resolver.ledger("main").totalCoins() + " monedas en 'main', "
+                    + resolver.likes("main").total() + " likes en 'main', caos nivel "
+                    + resolver.chaos("main").level() + " en 'main'");
         } catch (RuntimeException ex) {
             plugin.getLogger().warning("[ledger] no pude leer " + ARCHIVO + ": " + ex);
         }
+    }
+
+    private void loadLegacy(YamlConfiguration yaml) {
+        Map<String, Integer> donantes = new LinkedHashMap<>();
+        if (yaml.isConfigurationSection("donors")) {
+            for (String nombre : yaml.getConfigurationSection("donors").getKeys(false)) {
+                donantes.put(nombre, yaml.getInt("donors." + nombre, 0));
+            }
+        }
+
+        resolver.ledger("main").restore(donantes);
+        resolver.likes("main").restore(yaml.getInt("likes", 0));
+        // El caos es acumulado del live: si se reinicia el servidor a mitad, volver a nivel 0
+        // le quita a la gente lo que ya habia pagado entre todos.
+        resolver.chaos("main").restore(
+                yaml.getInt("chaos-donations", 0),
+                yaml.getInt("chaos-level", 0));
+    }
+
+    private void loadStreamer(ConfigurationSection seccion, String streamerId) {
+        if (seccion == null) return;
+
+        Map<String, Integer> donantes = new LinkedHashMap<>();
+        if (seccion.isConfigurationSection("donors")) {
+            for (String nombre : seccion.getConfigurationSection("donors").getKeys(false)) {
+                donantes.put(nombre, seccion.getInt("donors." + nombre, 0));
+            }
+        }
+
+        resolver.ledger(streamerId).restore(donantes);
+        resolver.likes(streamerId).restore(seccion.getInt("likes", 0));
+        resolver.chaos(streamerId).restore(
+                seccion.getInt("chaos-donations", 0),
+                seccion.getInt("chaos-level", 0));
     }
 
     public void save() {
@@ -90,6 +128,8 @@ public final class LedgerStore {
             if (!plugin.getDataFolder().exists() && !plugin.getDataFolder().mkdirs()) return;
 
             YamlConfiguration yaml = new YamlConfiguration();
+            // C8 solo lee los dos formatos; el escritor sigue en el plano del live "main"
+            // hasta C9, para que un rollback del codigo nuevo pueda releer este archivo.
             yaml.set("likes", resolver.likes().total());
             yaml.set("total-coins", resolver.ledger().totalCoins());
             yaml.set("chaos-level", resolver.chaos().level());
