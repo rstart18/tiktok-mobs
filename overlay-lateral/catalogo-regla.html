@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Catalogo regla</title>
+<!--
+  CATALOGO EN REGLA HORIZONTAL  ·  1080 x 200
+
+  Va pegado ENCIMA de la bandeja de regalos de TikTok. La gracia es la alineacion:
+  el viewer ve el regalo abajo y justo encima que provoca. No tiene que traducir
+  nada ni leer una tarjeta aparte.
+
+  Orden de izquierda a derecha = de mas barato a mas caro, igual que la bandeja
+  de TikTok. Por eso funciona.
+
+  OJO CON EL CHROMA: el fondo es verde puro #00FF00 y en el contenido NO hay ni
+  un verde. Si pusieras texto verde, el chroma se lo comeria con el fondo.
+
+  Parametros de URL:
+    ?chroma=magenta | azul | alpha      cambia o quita el fondo
+    ?scale=0.8                          escala todo
+-->
+<style>
+  :root{
+    --blanco:#ffffff;
+    --gris:#c8c8c8;
+    --cian:#55ffff;
+    --amarillo:#ffff55;
+    --oro:#ffaa00;
+    --rojo:#ff5555;
+    --chroma:#00ff00;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html{background:var(--chroma);}
+  body{
+    width:1080px;height:190px;overflow:hidden;
+    background:var(--chroma);
+    font-family:"Minecraft","Monocraft","Press Start 2P",ui-monospace,"DejaVu Sans Mono","Courier New",monospace;
+    color:var(--blanco);
+    -webkit-font-smoothing:none;
+    display:flex;align-items:center;justify-content:center;
+  }
+
+  /* Sin paneles: el contorno negro es lo unico que mantiene el texto legible
+     sobre cualquier cosa que haya en el juego detras. */
+  .sh{
+    text-shadow:
+      -2px -2px 0 #000,  0   -2px 0 #000,  2px -2px 0 #000,
+      -2px  0   0 #000,                    2px  0   0 #000,
+      -2px  2px 0 #000,  0    2px 0 #000,  2px  2px 0 #000,
+       3px  3px 0 rgba(0,0,0,.8);
+  }
+
+  .regla{
+    display:flex;align-items:flex-end;justify-content:center;
+    gap:3px;padding:0 6px;
+  }
+
+  .item{
+    width:94px;
+    display:flex;flex-direction:column;align-items:center;gap:1px;
+  }
+
+  /* Arriba: QUE sale. Es lo primero que lee el ojo.
+     19px es el tope: con 26px, 'CREEPER' se sale de su casilla y se pisa con el
+     de al lado, y entonces la regla deja de leerse como columnas. */
+  .item .que{
+    font-size:17px;line-height:1.05;letter-spacing:0;
+    color:var(--amarillo);white-space:nowrap;
+  }
+  .item .que.fuerte{color:var(--rojo);}
+  .item .que.bueno{color:var(--cian);}
+
+  .item .ico{
+    width:76px;height:76px;
+    display:flex;align-items:center;justify-content:center;
+  }
+  .item .ico img{
+    width:100%;height:100%;object-fit:contain;
+    /* Sin panel detras, el enderman y el warden se comerian con un fondo oscuro:
+       el contorno claro los despega de lo que haya en el juego. */
+    filter:drop-shadow(0 0 2px rgba(255,255,255,.65))
+           drop-shadow(2px 3px 0 rgba(0,0,0,.85));
+  }
+
+  /* Abajo: QUE REGALO hay que mandar, como DIBUJO. El viewer no lee "DONA" y busca
+     la palabra: reconoce la forma en la bandeja y la manda. Por eso va el icono y no
+     el nombre, y por eso el orden es el mismo que el de la bandeja de TikTok. */
+  .item .regalo{
+    width:54px;height:54px;margin-top:0;
+    display:flex;align-items:center;justify-content:center;
+  }
+  .item .regalo img{
+    width:100%;height:100%;object-fit:contain;
+    filter:drop-shadow(0 0 2px rgba(255,255,255,.7))
+           drop-shadow(2px 2px 0 rgba(0,0,0,.85));
+  }
+</style>
+</head>
+<body>
+  <div class="regla" id="regla"></div>
+
+<script>
+const params = new URLSearchParams(location.search);
+
+const chroma = {verde:'#00ff00', magenta:'#ff00ff', azul:'#0000ff', alpha:'transparent'};
+const fondo = chroma[params.get('chroma')] ?? (params.get('chroma') === null ? '#00ff00' : '#00ff00');
+document.documentElement.style.setProperty('--chroma', fondo);
+
+const escala = parseFloat(params.get('scale') || '1');
+if (escala !== 1) {
+  document.getElementById('regla').style.transform = `scale(${escala})`;
+}
+
+/* El catalogo, en el MISMO orden que la bandeja de regalos de TikTok:
+   de mas barato a mas caro. Si cambias los tramos del config.yml, cambia esto. */
+/* El primero es SEGUIR, que es GRATIS. Va a la izquierda del todo a proposito: es el
+   gancho mas barato que hay y lo primero que lee el ojo. Despues, de mas barato a
+   mas caro, en el mismo orden que la bandeja de regalos de TikTok. */
+const ITEMS = [
+  {que:'RAYOS',   icono:'rayo.png',           regalo:'g_seguir.png',   clase:'fuerte'},
+  {que:'TOTEM',   icono:'totem.png',          regalo:'g_rosa.png',     clase:'bueno'},
+  {que:'RANDOM',  icono:'random.png',         regalo:'g_quiereme.png', clase:''},
+  {que:'ARAÑAS',  icono:'spider.png',         regalo:'g_gg.png',       clase:''},
+  {que:'ZOMBIS',  icono:'husk.png',           regalo:'g_tiktok.png',   clase:''},
+  {que:'MANZANA', icono:'manzana_dorada.png', regalo:'g_helado.png',   clase:'bueno'},
+  {que:'CREEPER', icono:'creeper.png',        regalo:'g_dedos.png',    clase:'fuerte'},
+  {que:'ENDER',   icono:'enderman.png',       regalo:'g_perfume.png',  clase:''},
+  {que:'BRUJAS',  icono:'witch.png',          regalo:'g_dona.png',     clase:'fuerte'},
+  {que:'AL CIELO',icono:'water_drop.png',     regalo:'g_manos.png',    clase:'bueno'},
+  {que:'JEFE',    icono:'jefe.png',           regalo:'g_galaxia.png',  clase:'fuerte'},
+];
+
+/* Si falta un png, se pinta la inicial en vez de dejar el hueco:
+   un icono roto en directo se ve peor que una letra. */
+function imgHtml(archivo, alt, tam){
+  const letra = alt.charAt(0);
+  return `<img src="iconos/${archivo}" alt="${alt}"
+            onerror="this.replaceWith(Object.assign(document.createElement('div'),
+              {className:'sh', textContent:'${letra}',
+               style:'font-size:${tam}px;color:#ffffff;'}))">`;
+}
+
+document.getElementById('regla').innerHTML = ITEMS.map(item => `
+  <div class="item">
+    <div class="que sh ${item.clase}">${item.que}</div>
+    <div class="ico">${imgHtml(item.icono, item.que, 42)}</div>
+    <div class="regalo">${imgHtml(item.regalo, item.que, 26)}</div>
+  </div>
+`).join('');
+</script>
+</body>
+</html>

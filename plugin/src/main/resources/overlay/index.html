@@ -1,0 +1,689 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>TikTokMobs Overlay</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!--
+  Overlay para OBS / TikTok Live  ·  vertical 1080x1920
+
+  Browser source:
+      URL     http://127.0.0.1:8787/
+      Ancho   1080     Alto  1920
+      [x] Shutdown source when not visible
+      [x] Refresh browser when scene becomes active
+
+  Parámetros de URL:
+      ?demo=1      genera eventos falsos (para ver el diseño sin servidor)
+      ?scale=0.8   escala todo el overlay
+      ?toast=6     segundos que vive cada toast
+      ?debug=1     muestra el indicador de conexión
+      ?token=xxx   si configuraste overlay.token
+      ?top=0       oculta el panel de top donantes
+
+  Zonas seguras: la UI de TikTok tapa la franja superior (~200px), la inferior
+  (~560px de comentarios y regalos) y una columna a la derecha (~140px).
+  Todo el contenido vive dentro de esos márgenes.
+-->
+<style>
+  :root {
+    /* paleta de colores de chat de Minecraft */
+    --mc-white:   #ffffff;
+    --mc-gray:    #aaaaaa;
+    --mc-dgray:   #555555;
+    --mc-green:   #55ff55;
+    --mc-aqua:    #55ffff;
+    --mc-yellow:  #ffff55;
+    --mc-gold:    #ffaa00;
+    --mc-lpurple: #ff55ff;
+    --mc-red:     #ff5555;
+
+    --panel-fill:   rgba(16, 0, 16, 0.86);
+    --panel-edge:   #100010;
+    --panel-inner:  #28007f;
+
+    --safe-top:    220px;
+    --safe-bottom: 580px;
+    --safe-left:   28px;
+    --safe-right:  150px;
+
+    --px: 4px;
+  }
+
+  /* En horizontal la UI de TikTok no está, así que recuperamos el espacio de abajo. */
+  @media (min-aspect-ratio: 1/1) {
+    :root {
+      --safe-top:    40px;
+      --safe-bottom: 60px;
+      --safe-right:  40px;
+    }
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html, body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: transparent;   /* imprescindible para OBS */
+  }
+
+  body {
+    font-family: "Minecraft", "Monocraft", "Press Start 2P", ui-monospace,
+                 "DejaVu Sans Mono", "Courier New", monospace;
+    color: var(--mc-white);
+    -webkit-font-smoothing: none;
+    font-smooth: never;
+    text-rendering: optimizeSpeed;
+  }
+
+  #stage {
+    position: absolute;
+    inset: 0;
+    transform-origin: top left;
+  }
+
+  /* ---------------------------------------------------------- panel base */
+
+  .panel {
+    background: var(--panel-fill);
+    border: var(--px) solid var(--panel-edge);
+    box-shadow:
+      inset 0 0 0 var(--px) var(--panel-inner),
+      6px 6px 0 rgba(0, 0, 0, 0.45);
+    image-rendering: pixelated;
+  }
+
+  .shadowed {
+    text-shadow: 3px 3px 0 rgba(0, 0, 0, 0.9);
+  }
+
+  /* ---------------------------------------------------------- top donantes */
+
+  #top {
+    position: absolute;
+    top: var(--safe-top);
+    left: var(--safe-left);
+    width: 380px;
+    padding: 14px 16px 16px;
+  }
+
+  #top.hidden { display: none; }
+
+  #top h2 {
+    font-size: 20px;
+    font-weight: normal;
+    letter-spacing: 1px;
+    color: var(--mc-gold);
+    margin-bottom: 12px;
+    text-shadow: 3px 3px 0 rgba(0, 0, 0, 0.9);
+  }
+
+  #top ol { list-style: none; }
+
+  #top li {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 19px;
+    line-height: 1.5;
+    text-shadow: 3px 3px 0 rgba(0, 0, 0, 0.9);
+    animation: row-in 0.24s steps(4) both;
+  }
+
+  #top .rank  { color: var(--mc-dgray); width: 2ch; }
+  #top .who   { color: var(--mc-white); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #top .coins { color: var(--mc-aqua); }
+
+  #top .empty { font-size: 17px; color: var(--mc-dgray); }
+
+  @keyframes row-in {
+    from { opacity: 0; transform: translateX(-10px); }
+    to   { opacity: 1; transform: translateX(0); }
+  }
+
+  /* ---------------------------------------------------------- toasts */
+
+  #toasts {
+    position: absolute;
+    left: var(--safe-left);
+    right: var(--safe-right);
+    bottom: var(--safe-bottom);
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    align-items: flex-start;     /* cada toast ocupa lo que mide, no toda la franja */
+    gap: 12px;
+    max-height: 700px;
+  }
+
+  .toast {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 14px 18px;
+    width: fit-content;
+    max-width: 100%;
+    animation: toast-in 0.32s steps(6) both;
+  }
+
+  .toast.out { animation: toast-out 0.28s steps(5) both; }
+
+  @keyframes toast-in {
+    from { opacity: 0; transform: translateX(-110%); }
+    to   { opacity: 1; transform: translateX(0); }
+  }
+
+  @keyframes toast-out {
+    from { opacity: 1; transform: translateX(0); }
+    to   { opacity: 0; transform: translateX(-60px); }
+  }
+
+  .toast .icon { flex: 0 0 auto; width: 40px; height: 40px; }
+
+  .toast .body { flex: 1; min-width: 0; }
+
+  .toast .line1 {
+    font-size: 22px;
+    line-height: 1.35;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .toast .line2 {
+    font-size: 18px;
+    line-height: 1.4;
+    color: var(--mc-green);
+  }
+
+  .toast .donor { color: var(--mc-white); }
+  .toast .what  { color: var(--mc-yellow); }
+  .toast .arrow { color: var(--mc-dgray); padding: 0 4px; }
+
+  /* el color del borde interno marca el tier: se lee de un vistazo */
+  .toast[data-tier="social"]    { box-shadow: inset 0 0 0 var(--px) #1f5f1f, 6px 6px 0 rgba(0,0,0,.45); }
+  .toast[data-tier="common"]    { box-shadow: inset 0 0 0 var(--px) #3f3f5f, 6px 6px 0 rgba(0,0,0,.45); }
+  .toast[data-tier="uncommon"]  { box-shadow: inset 0 0 0 var(--px) #1f6f3f, 6px 6px 0 rgba(0,0,0,.45); }
+  .toast[data-tier="rare"]      { box-shadow: inset 0 0 0 var(--px) #15607f, 6px 6px 0 rgba(0,0,0,.45); }
+  .toast[data-tier="epic"]      { box-shadow: inset 0 0 0 var(--px) #8a5a00, 6px 6px 0 rgba(0,0,0,.45); }
+  .toast[data-tier="legendary"] { box-shadow: inset 0 0 0 var(--px) #7f007f, 6px 6px 0 rgba(0,0,0,.45); }
+
+  .toast[data-tier="legendary"] .line1 { font-size: 26px; }
+  .toast[data-degraded="true"] .line2  { color: var(--mc-gray); }
+
+  /* ---------------------------------------------------------- alerta grande */
+
+  #alert {
+    position: absolute;
+    left: var(--safe-left);
+    right: var(--safe-right);
+    top: 38%;                    /* deja aire por debajo para la pila de toasts */
+    transform: translateY(-50%);
+    padding: 34px 30px 36px;
+    text-align: center;
+    display: none;
+  }
+
+  #alert.show {
+    display: block;
+    animation: alert-in 0.44s steps(7) both;
+  }
+
+  #alert.show.out { animation: alert-out 0.3s steps(5) both; }
+
+  #alert .kicker {
+    font-size: 20px;
+    letter-spacing: 3px;
+    color: var(--mc-lpurple);
+    margin-bottom: 18px;
+  }
+
+  #alert .donor {
+    font-size: 52px;
+    line-height: 1.15;
+    color: var(--mc-white);
+    word-break: break-word;
+    margin-bottom: 16px;
+  }
+
+  #alert .gift {
+    font-size: 26px;
+    color: var(--mc-gold);
+    margin-bottom: 22px;
+  }
+
+  #alert .what {
+    font-size: 30px;
+    color: var(--mc-red);
+  }
+
+  #alert .icon { width: 72px; height: 72px; margin: 0 auto 20px; }
+
+  #alert.show .flash {
+    position: absolute;
+    inset: calc(var(--px) * -2);
+    pointer-events: none;
+    animation: edge-flash 0.5s steps(2) infinite;
+  }
+
+  @keyframes alert-in {
+    0%   { opacity: 0; transform: translateY(-50%) scale(0.25); }
+    100% { opacity: 1; transform: translateY(-50%) scale(1); }
+  }
+
+  @keyframes alert-out {
+    0%   { opacity: 1; transform: translateY(-50%) scale(1); }
+    100% { opacity: 0; transform: translateY(-50%) scale(1.15); }
+  }
+
+  @keyframes edge-flash {
+    0%   { box-shadow: inset 0 0 0 var(--px) var(--mc-lpurple); }
+    100% { box-shadow: inset 0 0 0 var(--px) var(--mc-gold); }
+  }
+
+  /* ---------------------------------------------------------- estado */
+
+  #status {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    font-size: 14px;
+    color: var(--mc-gray);
+    background: rgba(0, 0, 0, 0.6);
+    padding: 4px 8px;
+    display: none;
+  }
+
+  #status.visible { display: block; }
+  #status.ok  { color: var(--mc-green); }
+  #status.bad { color: var(--mc-red); }
+</style>
+</head>
+<body>
+
+<div id="stage">
+  <div id="status" class="shadowed"></div>
+
+  <section id="top" class="panel">
+    <h2>TOP DONANTES</h2>
+    <ol id="topList"><li class="empty">sin donaciones aún</li></ol>
+  </section>
+
+  <div id="toasts"></div>
+
+  <section id="alert" class="panel">
+    <div class="flash"></div>
+    <div class="icon" id="alertIcon"></div>
+    <div class="kicker shadowed" id="alertKicker">REGALO LEGENDARIO</div>
+    <div class="donor shadowed" id="alertDonor"></div>
+    <div class="gift shadowed" id="alertGift"></div>
+    <div class="what shadowed" id="alertWhat"></div>
+  </section>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var params = new URLSearchParams(location.search);
+  var DEMO       = params.get("demo") === "1";
+  var DEBUG      = params.get("debug") === "1";
+  var SCALE      = parseFloat(params.get("scale") || "1") || 1;
+  var TOAST_SECS = parseFloat(params.get("toast") || "6") || 6;
+  var SHOW_TOP   = params.get("top") !== "0";
+  var TOKEN      = params.get("token") || "";
+
+  var MAX_TOASTS = 4;
+  var ALERT_SECS = 5;
+
+  var elToasts    = document.getElementById("toasts");
+  var elTopList   = document.getElementById("topList");
+  var elTop       = document.getElementById("top");
+  var elAlert     = document.getElementById("alert");
+  var elStatus    = document.getElementById("status");
+  var elAlertIcon = document.getElementById("alertIcon");
+
+  if (SCALE !== 1) {
+    var stage = document.getElementById("stage");
+    stage.style.transform = "scale(" + SCALE + ")";
+    stage.style.width  = (100 / SCALE) + "%";
+    stage.style.height = (100 / SCALE) + "%";
+  }
+  if (!SHOW_TOP) elTop.classList.add("hidden");
+  if (DEBUG) elStatus.classList.add("visible");
+
+  // -------------------------------------------------------------- iconos
+  // SVG inline con shape-rendering crispEdges: pixel art de verdad, sin imágenes
+  // externas, así el overlay funciona sin internet.
+
+  function pixelSvg(size, cells, palette) {
+    var rects = "";
+    for (var i = 0; i < cells.length; i++) {
+      var row = cells[i];
+      for (var j = 0; j < row.length; j++) {
+        var key = row.charAt(j);
+        if (key === ".") continue;
+        rects += '<rect x="' + j + '" y="' + i + '" width="1" height="1" fill="'
+              + palette[key] + '"/>';
+      }
+    }
+    return '<svg viewBox="0 0 ' + size + ' ' + size + '" width="100%" height="100%" '
+         + 'shape-rendering="crispEdges">' + rects + "</svg>";
+  }
+
+  var DIAMOND = [
+    "...11...",
+    "..1221..",
+    ".122221.",
+    "12222221",
+    ".122221.",
+    "..1221..",
+    "...11...",
+    "........"
+  ];
+
+  var HEART = [
+    ".11..11.",
+    "11111111",
+    "11111111",
+    "11111111",
+    ".111111.",
+    "..1111..",
+    "...11...",
+    "........"
+  ];
+
+  var SKULL = [
+    ".111111.",
+    "11111111",
+    "1.1111.1",
+    "11111111",
+    "1.1..1.1",
+    "11111111",
+    ".1.11.1.",
+    "........"
+  ];
+
+  var TIER_COLOR = {
+    social:    "#55ff55",
+    common:    "#aaaaaa",
+    uncommon:  "#55ff55",
+    rare:      "#55ffff",
+    epic:      "#ffaa00",
+    legendary: "#ff55ff"
+  };
+
+  function iconFor(event) {
+    var tier  = event.tier || "common";
+    var color = TIER_COLOR[tier] || "#ffffff";
+
+    if (event.type !== "GIFT") {
+      return pixelSvg(8, HEART, { "1": "#ff5555" });
+    }
+    if (tier === "legendary" || tier === "epic") {
+      return pixelSvg(8, SKULL, { "1": color });
+    }
+    return pixelSvg(8, DIAMOND, { "1": color, "2": "#ffffff" });
+  }
+
+  // -------------------------------------------------------------- toasts
+
+  function textOf(event) {
+    if (event.type === "GIFT") {
+      var gift = event.gift || "regalo";
+      return event.count > 1 ? gift + " x" + event.count : gift;
+    }
+    if (event.type === "LIKE")      return "likes";
+    if (event.type === "FOLLOW")    return "te sigue";
+    if (event.type === "SHARE")     return "compartió el live";
+    if (event.type === "SUBSCRIBE") return "se suscribió";
+    return event.type.toLowerCase();
+  }
+
+  function addToast(event) {
+    var el = document.createElement("div");
+    el.className = "panel toast";
+    el.setAttribute("data-tier", event.tier || "common");
+    el.setAttribute("data-degraded", String(!!event.degraded));
+
+    var icon = document.createElement("div");
+    icon.className = "icon";
+    icon.innerHTML = iconFor(event);          // SVG propio, no contenido del usuario
+
+    var body = document.createElement("div");
+    body.className = "body";
+
+    var line1 = document.createElement("div");
+    line1.className = "line1 shadowed";
+
+    // textContent, nunca innerHTML: el nick viene de un desconocido.
+    var donor = document.createElement("span");
+    donor.className = "donor";
+    donor.textContent = event.donor || "anon";
+
+    var arrow = document.createElement("span");
+    arrow.className = "arrow";
+    arrow.textContent = "»";
+
+    var what = document.createElement("span");
+    what.className = "what";
+    what.textContent = textOf(event);
+
+    line1.appendChild(donor);
+    line1.appendChild(arrow);
+    line1.appendChild(what);
+
+    var line2 = document.createElement("div");
+    line2.className = "line2 shadowed";
+    line2.textContent = event.degraded
+      ? (event.action || "") + " (servidor cargado)"
+      : (event.action || "");
+
+    body.appendChild(line1);
+    if (line2.textContent) body.appendChild(line2);
+
+    el.appendChild(icon);
+    el.appendChild(body);
+    elToasts.appendChild(el);
+
+    while (elToasts.children.length > MAX_TOASTS) {
+      elToasts.removeChild(elToasts.firstChild);
+    }
+
+    setTimeout(function () {
+      el.classList.add("out");
+      setTimeout(function () {
+        if (el.parentNode) el.parentNode.removeChild(el);
+      }, 300);
+    }, TOAST_SECS * 1000);
+  }
+
+  // -------------------------------------------------------------- alerta grande
+
+  var alertQueue = [];
+  var alertBusy = false;
+
+  function queueAlert(event) {
+    alertQueue.push(event);
+    if (alertQueue.length > 3) alertQueue.shift();   // en una avalancha, los últimos
+    pumpAlert();
+  }
+
+  function pumpAlert() {
+    if (alertBusy || alertQueue.length === 0) return;
+
+    var event = alertQueue.shift();
+    alertBusy = true;
+
+    var KICKER = {
+      legendary: "REGALO LEGENDARIO",
+      epic:      "REGALO ÉPICO",
+      rare:      "REGALO RARO"
+    };
+
+    elAlertIcon.innerHTML = iconFor(event);
+    document.getElementById("alertKicker").textContent = KICKER[event.tier] || "REGALO GRANDE";
+    document.getElementById("alertDonor").textContent = event.donor || "anon";
+    document.getElementById("alertGift").textContent  = textOf(event)
+      + (event.coins ? "  ·  " + event.coins + " monedas" : "");
+    document.getElementById("alertWhat").textContent  = event.action || "";
+
+    elAlert.classList.remove("out");
+    elAlert.classList.add("show");
+
+    setTimeout(function () {
+      elAlert.classList.add("out");
+      setTimeout(function () {
+        elAlert.classList.remove("show", "out");
+        alertBusy = false;
+        pumpAlert();
+      }, 320);
+    }, ALERT_SECS * 1000);
+  }
+
+  // -------------------------------------------------------------- top donantes
+
+  function renderTop(donors) {
+    elTopList.textContent = "";
+
+    if (!donors || donors.length === 0) {
+      var empty = document.createElement("li");
+      empty.className = "empty";
+      empty.textContent = "sin donaciones aún";
+      elTopList.appendChild(empty);
+      return;
+    }
+
+    donors.forEach(function (donor, index) {
+      var li = document.createElement("li");
+
+      var rank = document.createElement("span");
+      rank.className = "rank";
+      rank.textContent = (index + 1) + ".";
+
+      var who = document.createElement("span");
+      who.className = "who";
+      who.textContent = donor.label || "anon";
+
+      var coins = document.createElement("span");
+      coins.className = "coins";
+      coins.textContent = donor.coins;
+
+      li.appendChild(rank);
+      li.appendChild(who);
+      li.appendChild(coins);
+      elTopList.appendChild(li);
+    });
+  }
+
+  // -------------------------------------------------------------- router
+
+  function handle(payload) {
+    if (!payload || !payload.kind) return;
+
+    if (payload.kind === "state") {
+      renderTop(payload.top);
+      return;
+    }
+    if (payload.kind === "event") {
+      addToast(payload);
+      if (payload.alert) queueAlert(payload);
+    }
+  }
+
+  function setStatus(text, ok) {
+    elStatus.textContent = text;
+    elStatus.className = "shadowed " + (DEBUG ? "visible " : "") + (ok ? "ok" : "bad");
+  }
+
+  // -------------------------------------------------------------- conexión
+
+  if (!DEMO) {
+    var url = "/events" + (TOKEN ? "?token=" + encodeURIComponent(TOKEN) : "");
+    var source = new EventSource(url);
+
+    source.onopen = function () { setStatus("conectado", true); };
+
+    source.onmessage = function (message) {
+      try {
+        handle(JSON.parse(message.data));
+      } catch (error) {
+        setStatus("JSON ilegible", false);
+      }
+    };
+
+    // EventSource reconecta solo; esto es solo para verlo con ?debug=1
+    source.onerror = function () { setStatus("reconectando...", false); };
+  } else {
+    setStatus("DEMO", true);
+    runDemo();
+  }
+
+  // -------------------------------------------------------------- demo
+
+  function runDemo() {
+    var nicks = ["juanse", "ana.mp4", "Miguel Angel", "cucuta_777", "pepito",
+                 "la_cuarta", "skater_vdr"];
+    var gifts = [
+      { gift: "Rose",         coins: 1,    count: 30, action: "3x zombie" },
+      { gift: "Finger Heart", coins: 5,    count: 1,  action: "4x skeleton" },
+      { gift: "TikTok",       coins: 1,    count: 12, action: "2x creeper" },
+      { gift: "Galaxy",       coins: 1000, count: 1,  action: "jefe ravager" },
+      { gift: "Lion",         coins: 29999, count: 1, action: "jefe warden" },
+      { gift: "Cap",          coins: 99,   count: 1,  action: "10x zombie" },
+      { gift: "Doughnut",     coins: 30,   count: 1,  action: "tnt_rain" }
+    ];
+    var ledger = {};
+
+    function tierOf(coins) {
+      if (coins <= 0)   return "social";
+      if (coins <= 9)   return "common";
+      if (coins <= 99)  return "uncommon";
+      if (coins <= 499) return "rare";
+      if (coins <= 999) return "epic";
+      return "legendary";
+    }
+
+    function pick(list) { return list[Math.floor(Math.random() * list.length)]; }
+
+    function tick() {
+      var nick = pick(nicks);
+      var roll = Math.random();
+      var event;
+
+      if (roll < 0.18) {
+        event = { kind: "event", type: "FOLLOW", donor: nick, coins: 0,
+                  tier: "social", action: "1x allay", alert: false };
+      } else if (roll < 0.28) {
+        event = { kind: "event", type: "LIKE", donor: nick, coins: 0,
+                  tier: "social", action: "velocidad para todos", alert: false };
+      } else {
+        var template = pick(gifts);
+        var coins = template.coins * template.count;
+        event = {
+          kind: "event", type: "GIFT", donor: nick,
+          gift: template.gift, count: template.count, coins: coins,
+          action: template.action, tier: tierOf(coins),
+          alert: coins >= 500, degraded: Math.random() < 0.06
+        };
+        ledger[nick] = (ledger[nick] || 0) + coins;
+      }
+
+      handle(event);
+
+      var top = Object.keys(ledger)
+        .map(function (label) { return { label: label, coins: ledger[label] }; })
+        .sort(function (a, b) { return b.coins - a.coins; })
+        .slice(0, 5);
+      handle({ kind: "state", top: top });
+
+      setTimeout(tick, 1200 + Math.random() * 2600);
+    }
+
+    setTimeout(tick, 600);
+  }
+})();
+</script>
+</body>
+</html>

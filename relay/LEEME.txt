@@ -1,0 +1,51 @@
+===============================================================
+  TikTokMobs - Relay
+  Para que TUS donaciones de TikTok salgan en el Minecraft
+  del servidor de tu amigo.
+===============================================================
+
+QUE INSTALAS
+  Solo TikFinity (la app de escritorio):
+      https://tikfinity.zerody.one/app/
+
+  El relay no instala nada. Usa el PowerShell que ya trae Windows.
+
+
+COMO SE USA
+  1. Abre TikFinity y vincula tu cuenta de TikTok.
+  2. Empieza tu directo.
+  3. Doble clic en  relay.bat
+  4. La primera vez te pide tres datos (luego ya no):
+
+       Direccion del servidor : te la pasa tu amigo
+                                ej: http://algo.joinmc.link:8787
+       Tu id de streamer      : te lo pasa tu amigo
+                                ej: pana
+       Token                  : solo si te dieron uno
+
+  5. Deja la ventana abierta mientras transmites.
+
+  Si todo va bien veras:
+
+       [OK] conectado a TikFinity
+       enviados: 1
+
+
+SI ALGO FALLA
+
+  "Esta abierta la app de TikFinity?"
+      TikFinity no esta corriendo, o no esta en un directo.
+      El puerto 21213 solo existe con la app abierta.
+
+  "no pude enviar al servidor"
+      El servidor de tu amigo esta apagado, o la direccion
+      esta mal. Que te la confirme.
+
+  Quieres cambiar los datos?
+      Borra  relay-config.txt  y vuelve a abrir relay.bat.
+
+
+QUE SALE DE TU PC
+  Solo los eventos de tu directo (regalos, likes, follows) hacia
+  el servidor de tu amigo. Son conexiones de SALIDA: no se abre
+  ningun puerto en tu equipo y nadie puede entrar por aqui.

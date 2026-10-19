@@ -1,0 +1,33 @@
+# Gradle
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+
+# IDEs
+.idea/
+*.iml
+.vscode/
+
+# Estado del live: es de cada servidor, no del repo
+ledger.yml
+
+# ---------------------------------------------------------------------------
+#  ASSETS QUE NO SON NUESTROS
+#
+#  El catalogo se ve con iconos de los regalos de TikTok y con texturas de mobs
+#  de Minecraft. Ninguna de las dos cosas es nuestra, asi que no se redistribuyen
+#  aqui: cada quien pone las suyas en overlay-lateral/iconos/.
+#
+#  Los iconos dibujados para este proyecto (rayo, water_drop, jefe, random,
+#  witch, manzana_dorada, g_seguir) SI estan en el repo, con la excepcion de
+#  abajo. El catalogo funciona igual sin los demas: donde falta un png pinta la
+#  inicial, asi que nunca se ve un hueco roto en directo.
+# ---------------------------------------------------------------------------
+overlay-lateral/iconos/*.png
+!overlay-lateral/iconos/rayo.png
+!overlay-lateral/iconos/water_drop.png
+!overlay-lateral/iconos/jefe.png
+!overlay-lateral/iconos/random.png
+!overlay-lateral/iconos/witch.png
+!overlay-lateral/iconos/manzana_dorada.png
+!overlay-lateral/iconos/g_seguir.png

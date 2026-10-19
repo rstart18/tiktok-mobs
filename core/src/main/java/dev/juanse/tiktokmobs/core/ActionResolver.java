@@ -1,0 +1,158 @@
+package dev.juanse.tiktokmobs.core;
+
+import dev.juanse.tiktokmobs.core.action.ActionSpec;
+import dev.juanse.tiktokmobs.core.action.ResolvedAction;
+import dev.juanse.tiktokmobs.core.config.MappingTable;
+import dev.juanse.tiktokmobs.core.dedup.DedupPolicy;
+import dev.juanse.tiktokmobs.core.dedup.LikeAccumulator;
+import dev.juanse.tiktokmobs.core.event.EventType;
+import dev.juanse.tiktokmobs.core.event.GiftEvent;
+import dev.juanse.tiktokmobs.core.event.GiftInfo;
+import dev.juanse.tiktokmobs.core.util.NameSanitizer;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
+
+/**
+ * El cerebro: evento crudo → lista de acciones a ejecutar. Sin Bukkit, sin red, sin estado
+ * global. Es la clase que puedes testear a fondo sin levantar un servidor, y es donde vale
+ * la pena tener cobertura real.
+ */
+public final class ActionResolver {
+
+    /** Techo de acciones generadas por un solo evento. Un lote de 5000 likes no rompe el tick. */
+    private static final int MAX_ACTIONS_PER_EVENT = 5;
+
+    private final MappingTable table;
+    private final DedupPolicy dedup;
+    private final LikeAccumulator likes;
+    private final DonorLedger ledger;
+    private final ChaosLevel chaos;
+    private final GiftRegistry gifts = new GiftRegistry();
+    private volatile GiftInfo lastUnseen;
+    private volatile int lastChaosLevelUp;
+
+    public ActionResolver(MappingTable table, DedupPolicy dedup) {
+        this(table, dedup, 20);
+    }
+
+    /** @param donacionesPorNivelDeCaos cada cuántas donaciones sube el nivel de caos */
+    public ActionResolver(MappingTable table, DedupPolicy dedup, int donacionesPorNivelDeCaos) {
+        this.table = table == null ? MappingTable.empty() : table;
+        this.dedup = dedup == null ? new DedupPolicy(60_000L) : dedup;
+        this.likes = new LikeAccumulator(this.table.likeEvery());
+        this.ledger = new DonorLedger(this.table.donationGoalCoins());
+        this.chaos = new ChaosLevel(donacionesPorNivelDeCaos);
+    }
+
+    public List<ResolvedAction> resolve(GiftEvent event) {
+        return resolve(event, "main");
+    }
+
+    /**
+     * @param streamerId de qué live viene el evento. Con varios streamers en el mismo
+     *                   servidor, dos lives distintos pueden emitir el mismo msgId, así que
+     *                   el dedup tiene que ser por fuente o se pisarían entre ellos.
+     */
+    public List<ResolvedAction> resolve(GiftEvent event, String streamerId) {
+        if (event == null || !dedup.accept(event, streamerId)) return List.of();
+
+        String donor = NameSanitizer.clean(event.user().rawLabel());
+
+        List<ResolvedAction> actions = switch (event.type()) {
+            case GIFT -> giftActions(event, donor, streamerId);
+            case LIKE -> likeActions(event, donor, streamerId);
+            default -> simpleActions(event, donor, streamerId);
+        };
+
+        if (event.type() != EventType.GIFT || event.coins() <= 0) return actions;
+
+        // Cada donación empuja el nivel de caos. Se apunta aquí, en el único sitio por el que
+        // pasan todas, y no en el executor: una donación con cinco acciones sigue siendo una.
+        int subioA = chaos.record();
+        if (subioA > 0) lastChaosLevelUp = subioA;
+
+        int goalsReached = ledger.record(donor, event.coins());
+        if (goalsReached <= 0 || !table.goalEnabled()) return actions;
+
+        List<ResolvedAction> withGoal = new ArrayList<>(actions);
+        for (int i = 0; i < Math.min(goalsReached, 2); i++) {
+            withGoal.add(new ResolvedAction(table.goalReward(), event, donor, event.coins(), streamerId));
+        }
+        return withGoal;
+    }
+
+    private List<ResolvedAction> giftActions(GiftEvent event, String donor, String streamerId) {
+        GiftInfo gift = event.gift();
+        if (gift != null) {
+            // Apuntamos TODO regalo que entra, con su id. Es la única forma fiable de saber
+            // qué mapear después, porque el nombre llega traducido al idioma de la cuenta.
+            lastUnseen = gifts.record(gift, table.hasExplicit(gift)) ? gift : null;
+        }
+
+        return event.giftInfo()
+                .flatMap(table::forGift)
+                .map(spec -> List.of(new ResolvedAction(spec, event, donor, event.coins(), streamerId)))
+                .orElse(List.of());
+    }
+
+    private List<ResolvedAction> likeActions(GiftEvent event, String donor, String streamerId) {
+        int crossed = likes.add(event.likeCount());
+        if (crossed <= 0) return List.of();
+
+        Optional<ActionSpec> spec = table.forEventType(EventType.LIKE);
+        if (spec.isEmpty()) return List.of();
+
+        int repeats = Math.min(crossed, MAX_ACTIONS_PER_EVENT);
+        List<ResolvedAction> actions = new ArrayList<>(repeats);
+        for (int i = 0; i < repeats; i++) {
+            actions.add(new ResolvedAction(spec.get(), event, donor, 0, streamerId));
+        }
+        return actions;
+    }
+
+    private List<ResolvedAction> simpleActions(GiftEvent event, String donor, String streamerId) {
+        return table.forEventType(event.type())
+                .map(spec -> List.of(new ResolvedAction(spec, event, donor, 0, streamerId)))
+                .orElse(List.of());
+    }
+
+    public GiftRegistry gifts() {
+        return gifts;
+    }
+
+    /** El regalo que se acaba de ver por primera vez, o null. Para loguearlo una sola vez. */
+    public GiftInfo takeFirstSighting() {
+        GiftInfo gift = lastUnseen;
+        lastUnseen = null;
+        return gift;
+    }
+
+    public LikeAccumulator likes() {
+        return likes;
+    }
+
+    public ChaosLevel chaos() {
+        return chaos;
+    }
+
+    /** El nivel al que acaba de subir el caos, o 0. Para anunciarlo una sola vez. */
+    public int takeChaosLevelUp() {
+        int nivel = lastChaosLevelUp;
+        lastChaosLevelUp = 0;
+        return nivel;
+    }
+
+    public DonorLedger ledger() {
+        return ledger;
+    }
+
+    public MappingTable table() {
+        return table;
+    }
+
+    public DedupPolicy dedup() {
+        return dedup;
+    }
+}

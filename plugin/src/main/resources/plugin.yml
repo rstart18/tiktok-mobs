@@ -1,0 +1,26 @@
+name: TikTokMobs
+version: ${version}
+main: dev.juanse.tiktokmobs.plugin.TikTokMobsPlugin
+# Lo rellena Gradle. OJO: un servidor MÁS VIEJO que este valor se niega a cargar el plugin,
+# así que para 1.21.x hay que compilar con -PapiVersion=1.21
+api-version: '${apiVersion}'
+author: Juan Sebastian Baez Rueda
+description: Convierte regalos, likes y follows de TikTok Live en mobs y eventos dentro de Minecraft.
+website: https://github.com/juansebastianbaezr/tiktok-mobs
+# Todos opcionales: el plugin funciona igual sin ninguno.
+#  - floodgate/Geyser: jugadores de Bedrock.
+#  - BetterModel: modelos propios para los jefes. Sin el, el jefe sale vanilla equipado.
+softdepend:
+  - floodgate
+  - Geyser-Spigot
+  - BetterModel
+commands:
+  ttmobs:
+    description: Control del puente TikTok -> Minecraft
+    usage: /ttmobs <status|reload|connect|disconnect|overlay|target|test|testboss|likes|raw|clear|reset>
+    aliases: [tiktokmobs, ttm]
+    permission: tiktokmobs.admin
+permissions:
+  tiktokmobs.admin:
+    description: Administrar el puente TikTok -> Minecraft
+    default: op

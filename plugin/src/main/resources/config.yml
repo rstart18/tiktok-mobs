@@ -1,0 +1,577 @@
+#  TikTokMobs - configuracion
+#
+#  Flujo:  TikTok Live -> TikFinity (ws local) -> este plugin -> mobs
+#
+#  Para probar sin live:  /ttmobs test rose 30
+
+source:
+  # fake     -> solo el inyector manual (/ttmobs test). Empieza aqui.
+  # tikfinity-> WebSocket local de la app de escritorio TikFinity.
+  type: fake
+
+  tikfinity:
+    url: "ws://127.0.0.1:21213/"
+    # Reconexion con backoff exponencial: 2s, 4s, 8s... hasta este techo.
+    reconnect-max-seconds: 60
+
+# ---------------------------------------------------------------------------
+#  LIVES CONECTADOS  --  uno por cada streamer
+#
+#    url puesta  -> el plugin se conecta HACIA ese TikFinity.
+#                   El tuyo, en tu propio PC:  ws://127.0.0.1:21213/
+#
+#    url vacia   -> modo relay: ese PC EMPUJA sus eventos a /ingest.
+#                   Es lo que usan tus amigos. No abren ningun puerto ni montan
+#                   tuneles: su relay solo hace conexiones de salida.
+#
+#    player      -> opcional. Si ese jugador esta conectado, las donaciones de
+#                   SU live le salen a EL alrededor. Si lo dejas vacio, todo
+#                   cae en el objetivo comun de 'target'.
+#
+#  El 'id' es libre pero no se puede repetir: con el se separan los contadores
+#  y el dedup de cada live.
+# ---------------------------------------------------------------------------
+sources:
+  - id: main
+    url: "ws://127.0.0.1:21213/"
+    player: ""
+
+  # Descomenta y ajusta por cada amigo que conecte su live con el relay:
+  # - id: pana
+  #   url: ""
+  #   player: "NombreMinecraftDeTuPana"
+
+# Donde aparecen los mobs
+target:
+  # player        -> alrededor del jugador indicado en 'player-name'
+  # first-online  -> alrededor del primer jugador conectado (comodo para pruebas)
+  # location      -> coordenadas fijas (una arena)
+  mode: first-online
+  player-name: ""
+  location:
+    world: "world"
+    x: 0.5
+    y: 64.0
+    z: 0.5
+
+# Los limites que mantienen el servidor vivo durante un live
+limits:
+  # Entidades spawneadas que se mantienen vivas a la vez. La 201 despawnea la mas antigua.
+  max-live-spawned: 200
+  # Acciones ejecutadas por tick. 4 x 20 ticks = hasta 80 acciones/segundo como techo duro.
+  max-actions-per-tick: 4
+  # Si el TPS baja de aqui, el plugin degrada: no spawnea mobs, solo avisa en el chat.
+  tps-floor: 17.0
+  # Tamanio de la cola entre el hilo del WebSocket y el hilo del servidor.
+  queue-capacity: 500
+  # Ventana de dedup para mensajes reenviados por TikTok tras un reconnect.
+  dedup-ttl-seconds: 120
+
+# Overlay para OBS / TikTok Live.
+# El plugin sirve la pagina y empuja los eventos por SSE. En OBS:
+#   Browser source -> URL http://127.0.0.1:8787/   Ancho 1080   Alto 1920
+overlay:
+  enabled: true
+  # Dejalo en 127.0.0.1: playit.gg corre en tu propio PC y alcanza esta direccion.
+  #
+  # IMPORTANTE: en cuanto expongas este puerto con playit (para que los relays de
+  # tus amigos lleguen), /ingest queda accesible desde internet. PON UN TOKEN o
+  # cualquiera podra inyectar donaciones falsas en tu servidor.
+  bind: "127.0.0.1"
+  port: 8787
+  token: ""
+  # Desde cuantas monedas se dispara la alerta grande a pantalla.
+  alert-min-coins: 500
+  # Cada cuantos ticks se refresca el top de donantes del overlay.
+  state-refresh-ticks: 40
+
+feedback:
+  # Anunciar en el chat quien dono y que paso.
+  broadcast: true
+  # Nombre del donante GRANDE en mitad de la pantalla. Se ve en camara sin tocar OBS,
+  # que es lo que hace falta cuando transmites desde el propio cliente de Minecraft.
+  title: true
+  # Freno: en un combo de 30 rosas llegan 30 acciones seguidas, y 30 titulos encadenados
+  # tapan la pantalla y no dejan jugar. Como mucho uno cada N segundos.
+  title-gap-seconds: 1.5
+  # Scoreboard lateral con el top de donantes del live.
+  scoreboard: true
+  scoreboard-size: 5
+  # Barra de meta de donacion arriba de la pantalla.
+  goal-bar: true
+
+# ---------------------------------------------------------------------------
+#  NIVEL DE CAOS
+#
+#  Cada N donaciones sube un nivel, y cada nivel multiplica los mobs que salen.
+#  Es PERMANENTE dentro del live y no baja. Eso le da a la gente una razon para
+#  donar que no es "quiero un zombi" sino "quiero ver hasta donde llega esto".
+#
+#  Techo x3: por encima el servidor se cae y deja de haber live.
+#  Se guarda en ledger.yml, asi que un reinicio no lo borra.
+#  Se reinicia con /ttmobs reset.
+# ---------------------------------------------------------------------------
+chaos:
+  every-donations: 20
+
+# ---------------------------------------------------------------------------
+#  CHAT DEL LIVE DENTRO DEL JUEGO
+#
+#  El que escribe en TikTok no ve nunca su mensaje en la transmision, porque tu
+#  pantalla es Minecraft. En cuanto se ve, escribe mas. Es lo mas barato que hay
+#  para que participe la gente que NO dona.
+# ---------------------------------------------------------------------------
+chat:
+  enabled: true
+  # Tope por segundo. Un live con publico mete cientos de comentarios por minuto:
+  # sin esto el chat de Minecraft es una cascada y no ves ni tu propia muerte.
+  # Lo que pasa del tope se descarta, no se encola.
+  max-per-second: 3
+  # 0 = se ven los comentarios de todos.
+  # Si lo subes (ej. 1), solo salen los de quien YA haya donado en este live.
+  # Util cuando hay mucha gente y quieres premiar al que puso.
+  min-coins: 0
+
+# Meta de donacion: al llenarse, ejecuta 'reward' y la barra vuelve a empezar.
+# 200 y no 1000: una meta que no se llena nunca no motiva a nadie. Asi cae 3 o 4
+# veces por live y cada una es un momento.
+goal:
+  coins: 200
+  reward:
+    action: boss
+    mob: WITHER
+    health-scale: 2.0
+    message: "&5&lMETA COMPLETADA &r- aparece el Wither"
+
+# Likes: una accion cada N likes acumulados del live.
+# Curacion COMPLETA cada 100 tap taps. Si acabas inmortal, sube 'every' a 300 o 500:
+# en un live con publico los likes entran muy rapido.
+likes:
+  every: 100
+  action: world_event
+  event: heal
+  message: "&b100 tap taps &7- vida completa"
+
+# Eventos sociales
+# SEGUIR = RAYOS. Es gratis, asi que es el gancho: "siganme y me caen rayos".
+# Caen 3 rayos de verdad, con dano. Si te siguen en rafaga vas a morir bastante;
+# si se vuelve insoportable, cambia 'rayo' por 'thunder' (se ve y suena, no pega).
+follow:
+  action: world_event
+  event: rayo
+  message: "&e&l⚡ %donor% te siguio &7- RAYOS"
+
+share:
+  action: world_event
+  event: random_loot
+  message: "&e%donor% compartio el live &7- loot"
+
+# ---------------------------------------------------------------------------
+#  MAPEO POR NOMBRE  --  usalo solo si sabes el idioma exacto
+#
+#  OJO: TikTok traduce el nombre del regalo al idioma de la cuenta. La misma rosa
+#  llega como "Rose", "Rosa" o "Corazon coreano" segun quien transmita, asi que un
+#  mapeo por nombre deja de funcionar en cuanto cambia el idioma.
+#  Lo fiable es el id numerico: mira 'gift-ids' aqui debajo.
+# ---------------------------------------------------------------------------
+#  EL CATALOGO DE VERDAD esta aqui: cada regalo hace una cosa concreta, y da igual
+#  lo que cueste. Es lo que engancha, porque el viewer manda "la rosa" o "la dona",
+#  no "200 monedas".
+#
+#  Cada regalo esta repetido en espanol y en ingles porque TikTok traduce el nombre
+#  al idioma de QUIEN DONA. Aun asi esto no es infalible: si alguien dona desde una
+#  cuenta en portugues, el nombre no coincide y cae en los tramos de abajo.
+#
+#  LO DEFINITIVO ES EL ID. Cuando cada uno de estos regalos haya entrado una vez,
+#  haz /ttmobs gifts, pasame la lista y los paso a 'gift-ids'. Ahi ya no falla nunca.
+gifts:
+
+  # ---- 1 moneda ----------------------------------------------------------
+  # per-coin 1 = un totem por moneda. 3 rosas = 3 totems. Sin esto, un combo de 20
+  # rosas daba UN totem y el que dono se quedaba mirando.
+  # max-count 3 es el freno: con un combo de 50 no te vuelves inmortal.
+  "Rosa": &totem
+    action: give
+    item: TOTEM_OF_UNDYING
+    count: 1
+    per-coin: 1
+    max-count: 3
+    coins: 1
+    label: "TOTEM"
+    message: "&d%donor% te mando %count% TOTEM(S)"
+  "Rose": *totem
+  "Rosas": *totem
+  "rose": *totem
+
+  # RANDOM: sale una cosa al azar, buena o mala. 12 resultados, mitad premio y mitad
+  # castigo. Se anuncia solo lo que salio, que es lo que lo hace divertido.
+  "Quiereme": &ruleta
+    action: world_event
+    event: ruleta
+    coins: 1
+    label: "RANDOM"
+  "Quiéreme": *ruleta
+  "Heart Me": *ruleta
+
+  "GG": &aranas
+    action: horde
+    mob: SPIDER
+    count: 6
+    per-coin: 2
+    max-count: 40
+    radius: 5
+    nameplate: true
+    coins: 1
+    label: "ARANAS"
+    message: "&8%donor% solto ARANAS"
+
+  "TikTok": &zombis
+    action: spawn
+    mob: HUSK
+    count: 3
+    per-coin: 2
+    max-count: 40
+    radius: 4
+    nameplate: true
+    coins: 1
+    label: "ZOMBIS"
+    message: "&2%donor% solto ZOMBIS"
+  "Tik Tok": *zombis
+  "tiktok": *zombis
+
+  # 7 helados = 7 manzanas. Esto era lo que fallaba: cantidad fija en 1.
+  "Helado": &manzana
+    action: give
+    item: GOLDEN_APPLE
+    count: 1
+    per-coin: 1
+    max-count: 20
+    coins: 1
+    label: "MANZANA DORADA"
+    message: "&6%donor% te mando %count% MANZANA(S) DORADA(S)"
+  "Cono de helado": *manzana
+  "Ice Cream Cone": *manzana
+
+  # ---- 5 monedas ---------------------------------------------------------
+  # OJO: en espanol este regalo se llama "Corazon coreano", no "corazon con los dedos".
+  # Es el mismo Finger Heart, y es el que te traia 1 pollo cuando no estaba mapeado.
+  "Corazón coreano": &creepers
+    action: horde
+    mob: CREEPER
+    count: 4
+    per-coin: 0.8
+    max-count: 20
+    radius: 6
+    nameplate: true
+    coins: 5
+    label: "CREEPERS"
+    message: "&a%donor% solto CREEPERS"
+  "Corazon coreano": *creepers
+  "Corazón con los dedos": *creepers
+  "Finger Heart": *creepers
+
+  # ---- 20 monedas --------------------------------------------------------
+  "Perfume": &ender
+    action: horde
+    mob: ENDERMAN
+    count: 3
+    per-coin: 0.2     # 20 monedas = 4 endermans; 100 monedas = 20
+    max-count: 20
+    radius: 5
+    nameplate: true
+    coins: 20
+    label: "ENDERMAN"
+    message: "&5%donor% invoco ENDERMAN &7- no los mires"
+
+  # ---- 30 monedas --------------------------------------------------------
+  # Los rayos se fueron al evento de SEGUIR, asi que la dona pasa a brujas: no se
+  # queman de dia y tiran pociones, que es un castigo distinto al de los otros mobs.
+  "Dona": &rayos
+    action: horde
+    mob: WITCH
+    count: 2
+    per-coin: 0.1     # 1 dona (30) = 3 brujas; 5 donas = 15
+    max-count: 15
+    radius: 6
+    coins: 30
+    nameplate: true
+    label: "BRUJAS"
+    message: "&5%donor% solto BRUJAS"
+  "Rosquilla": *rayos
+  "Doughnut": *rayos
+  "Donut": *rayos
+
+  # ---- 100 monedas -------------------------------------------------------
+  "Corazón con las manos": &cielo
+    action: world_event
+    event: water_drop
+    coins: 100
+    label: "AL CIELO"
+    message: "&b&l%donor% te tiro del cielo &7- clava el agua"
+  "Corazon con las manos": *cielo
+  "Hand Hearts": *cielo
+  "Hand Heart": *cielo
+
+  # ---- 1000 monedas ------------------------------------------------------
+  "Galaxia": &jefe
+    action: boss
+    boss: super-boss
+    radius: 6
+    coins: 1000
+    label: "UN JEFE"
+  "Galaxy": *jefe
+
+# ---------------------------------------------------------------------------
+#  MAPEO POR ID  --  esto es lo que debes usar
+#
+#  El id es el mismo en todos los idiomas. Para saber el id de un regalo:
+#    1. que alguien lo done (o usa /ttmobs raw para ver el JSON crudo)
+#    2. /ttmobs gifts  -> lista todos los vistos, con id, nombre y monedas
+#    3. la consola del servidor te imprime el bloque listo para pegar aqui
+#
+#  'coins' y 'label' son solo para el panel de catalogo; no afectan al juego.
+# ---------------------------------------------------------------------------
+#  Ids REALES, sacados de /ttmobs gifts en tu cuenta el 16/10/2026.
+#  Estos mandan sobre el bloque 'gifts' de arriba, que queda solo de respaldo para
+#  los regalos cuyo id todavia no hemos visto entrar.
+#
+#  OJO HISTORICO: aqui habia un ejemplo mio, 5655 -> 3 HUSK. Y 5655 es la ROSA.
+#  Como el id gana al nombre, la rosa daba zombis y nunca llegaba a la linea del
+#  totem. Ese fue el bug de "la rosa no da totem" y el de "1 rosa salen 3 skeletons".
+#  Moraleja: nada de ids de ejemplo en este bloque.
+gift-ids:
+
+  # NADA de referencias YAML (*algo) en este bloque: escritas completas a proposito.
+  # Una referencia que el lector del servidor no resuelva se salta EN SILENCIO y te
+  # quedas sin el mapeo sin un solo aviso en el log.
+
+  5655:               # Rosa              1 moneda
+    action: give
+    item: TOTEM_OF_UNDYING
+    count: 1
+    per-coin: 1
+    max-count: 3
+    coins: 1
+    label: "TOTEM"
+    message: "&d%donor% te mando %count% TOTEM(S)"
+
+  7934:               # Quiereme          1 moneda
+    action: world_event
+    event: ruleta
+    per-coin: 1       # 5 quiereme = 5 tiradas (techo de 10 por donacion)
+    max-count: 10
+    coins: 1
+    label: "RANDOM"
+
+  6064:               # GG                1 moneda
+    action: horde
+    mob: SPIDER
+    count: 6
+    per-coin: 2
+    max-count: 40
+    radius: 5
+    nameplate: true
+    coins: 1
+    label: "ARANAS"
+    message: "&8%donor% solto ARANAS"
+
+  5269:               # TikTok            1 moneda
+    action: spawn
+    mob: HUSK
+    count: 3
+    per-coin: 2
+    max-count: 40
+    radius: 4
+    nameplate: true
+    coins: 1
+    label: "ZOMBIS"
+    message: "&2%donor% solto ZOMBIS"
+
+  5827:               # Cono de helado    1 moneda
+    action: give
+    item: GOLDEN_APPLE
+    count: 1
+    per-coin: 1
+    max-count: 20
+    coins: 1
+    label: "MANZANA DORADA"
+    message: "&6%donor% te mando %count% MANZANA(S) DORADA(S)"
+
+  5487:               # Corazon coreano   5 monedas
+    action: horde
+    mob: CREEPER
+    count: 4
+    per-coin: 0.8
+    max-count: 20
+    radius: 6
+    nameplate: true
+    coins: 5
+    label: "CREEPERS"
+    message: "&a%donor% solto CREEPERS"
+
+  # Los dos que aparecieron sin mapear en tu lista:
+  15232:              # Eres increible    1 moneda
+    action: spawn
+    mob: CHICKEN
+    count: 1
+    per-coin: 2
+    max-count: 30
+    radius: 4
+    nameplate: true
+    coins: 1
+    label: "POLLOS"
+    message: "&f%donor% solto POLLOS"
+
+  6784:               # Rebanada de pastel 1 moneda  -> un pastel, obvio
+    action: give
+    item: CAKE
+    count: 1
+    per-coin: 1
+    max-count: 10
+    coins: 1
+    label: "PASTEL"
+    message: "&d%donor% te mando %count% PASTEL(ES)"
+
+  # Estos cuatro siguen por nombre porque aun no han entrado y no se su id.
+  # Cuando entren, /ttmobs gifts te los da y los movemos aqui:
+  #   Perfume (20) | Dona (30) | Corazon con las manos (100) | Galaxia (1000)
+
+# ---------------------------------------------------------------------------
+#  JEFES
+#
+#  Cambiar de jefe = cambiar estas lineas (y el .bbmodel si usas modelo).
+#  No hace falta recompilar nada.
+#
+#  Solo hay UN jefe vivo a la vez, y va FUERA del tope de 'max-live-spawned':
+#  no puede ser borrado a mitad de pelea por una horda que llegue despues.
+#  Si llega otra donacion de jefe mientras esta vivo, no sale un segundo:
+#  se ENFURECE (mas vida + el nombre del nuevo donante pegado al anterior).
+#
+#  model-id vacio = entidad vanilla equipada. Para usar modelo propio hace falta
+#  BetterModel instalado y un .bbmodel cargado con ese id.
+#  OJO con Bedrock: los jugadores que entran por Geyser NO ven el modelo, ven la
+#  entidad vanilla. La pelea es identica; solo cambia el aspecto.
+#
+#  Nada de modelos, texturas ni sonidos sacados de juegos comerciales: solo assets
+#  originales, por encargo o con licencia libre (CC0, CC-BY, GPL) con su atribucion.
+# ---------------------------------------------------------------------------
+bosses:
+  super-boss:
+    # Base: wither skeleton. No arde de dia y ya pega fuerte de serie.
+    base-entity: WITHER_SKELETON
+    model-id: ""
+
+    # Vida = hp-base + hp-per-coin * monedas, con techo en hp-max.
+    #   500 monedas -> 40 + 250 = 290 de vida
+    hp-base: 40
+    hp-per-coin: 0.5
+    hp-max: 300
+
+    # Nombre encima del bicho y en la barra. {donador} / {donadores} se sustituyen.
+    title-one: "{donador}, el Implacable"
+    title-many: "{donadores}, los Implacables"
+
+    # Segundos de suspenso (particulas + sonido) antes de que aparezca.
+    suspense-seconds: 3
+
+    phases:
+      # A la mitad de vida llama esbirros con el nombre del donante.
+      # Los esbirros SI entran en el tope normal de entidades.
+      minions:
+        at-health: 0.5
+        min: 2
+        max: 3
+        entity: WITHER_SKELETON
+      # Al 20% se vuelve mas rapido, pega mas y añade un salto con onda de empuje.
+      rage:
+        at-health: 0.2
+
+    # Mas monedas, mejor equipo. Se elige el tramo mas alto que la donacion alcance.
+    gear:
+      - min-coins: 0
+        weapon: STONE_SWORD
+        enchant-level: 1
+      - min-coins: 500
+        weapon: IRON_SWORD
+        helmet: IRON_HELMET
+        chest: IRON_CHESTPLATE
+        enchant-level: 2
+      - min-coins: 2000
+        weapon: DIAMOND_SWORD
+        helmet: DIAMOND_HELMET
+        chest: DIAMOND_CHESTPLATE
+        legs: DIAMOND_LEGGINGS
+        boots: DIAMOND_BOOTS
+        enchant-level: 4
+
+# ---------------------------------------------------------------------------
+#  TRAMOS POR MONEDAS  --  la red de seguridad, y lo que de verdad sostiene el live
+#
+#  Cualquier regalo sin mapeo propio cae aqui segun lo que valga. Funciona en
+#  cualquier idioma y con regalos que TikTok saque manana. Si solo configuras una
+#  cosa de este archivo, que sea esta.
+#
+#  Los mobs elegidos NO se queman al sol (husk, spider, creeper, ravager, warden).
+#  Si pones ZOMBIE o SKELETON arderan de dia y tus donantes veran humo, no mobs.
+#
+#  'radius' es cuanto se alejan de ti. En cuevas y minas conviene poco (4-6): el
+#  plugin ya busca sitio hacia dentro si el anillo esta tapiado, pero cuanto mas
+#  cerca empiece, antes encuentra hueco y mas se ven los mobs en camara.
+# ---------------------------------------------------------------------------
+tiers:
+  # 'per-coin' = cuantos mobs por moneda donada. Es lo que hace que la donacion se
+  # sienta proporcional: 15 TikToks (15 monedas) salen 15 mobs, no un numero fijo.
+  #   count     = suelo  (1 moneda sigue haciendo algo visible)
+  #   max-count = techo  (nadie tumba el servidor con un regalo de 30.000)
+  - max-coins: 29          # rosas, TikToks, corazones y sus combos
+    action: spawn
+    mob: HUSK
+    per-coin: 1
+    count: 2
+    max-count: 30
+    radius: 4
+    nameplate: true
+
+  - max-coins: 99
+    action: horde
+    mob: SPIDER
+    per-coin: 0.4
+    count: 12
+    max-count: 40
+    radius: 5
+    nameplate: true
+
+  - max-coins: 299
+    action: horde
+    mob: CREEPER
+    per-coin: 0.05
+    count: 6
+    max-count: 20
+    radius: 6
+    nameplate: true
+
+  - max-coins: 999         # ENDERMAN: 40 de vida, no arde, solo ataca si lo miras.
+    action: horde          # Ojo: la lluvia y el agua les hacen dano y se teletransportan.
+    mob: ENDERMAN
+    count: 4
+    radius: 5
+    nameplate: true
+    message: "&5%donor% invoco ENDERMAN &7- no los mires"
+
+  - max-coins: 2999
+    action: boss
+    boss: super-boss
+    radius: 6
+    message: "&4&l%donor% invoco UN JEFE"
+
+  - max-coins: 9999
+    action: world_event
+    event: tnt_rain
+    message: "&c%donor% solto lluvia de TNT"
+    message: "&c%donor% solto lluvia de TNT"
+
+  - max-coins: 999999
+    action: boss
+    mob: WARDEN
+    health-scale: 1.5
+    message: "&4&l%donor% invoco al WARDEN"

@@ -1,0 +1,51 @@
+===============================================================
+  Catalogo lateral con chroma key  -  420 x 1250
+===============================================================
+
+PASO 1 - SACAR LOS ICONOS DE TU MINECRAFT
+
+  Doble clic en  extraer-iconos.ps1  (boton derecho > Ejecutar
+  con PowerShell).
+
+  Busca el .jar de la version mas reciente que tengas instalada,
+  saca las texturas y las deja en la carpeta  iconos\
+
+  Al terminar abre  iconos\contacto.png : ahi se ven todos los
+  recortes juntos. Si alguno salio torcido, arriba del script hay
+  una tabla con las coordenadas x/y/w/h de cada uno. Cambias los
+  numeros y vuelves a ejecutar.
+
+  No descarga nada: usa los archivos de tu propio juego.
+
+
+PASO 2 - USARLO
+
+  OPCION A (recomendada): fuente de navegador
+     En OBS:  + > Navegador > Archivo local > catalogo-lateral.html
+     Ancho 420, Alto 1250.
+     Asi no necesitas chroma: pon ?chroma=alpha al final de la URL
+     y el fondo sale transparente, sin bordes verdes.
+
+  OPCION B: imagen con chroma
+     Abre catalogo-lateral.html en el navegador, haz captura y
+     recorta. En OBS anade el filtro "Clave de color" (chroma key)
+     con color VERDE.
+
+
+POR QUE NO HAY NI UN VERDE EN EL DISENO
+
+  El chroma borra TODO lo que se parezca al color de fondo. El
+  verde de Minecraft (#55FF55) se habria borrado junto al fondo,
+  o habria dejado halos. Por eso los efectos van en cian.
+
+  Si tu programa admite PNG con transparencia, usa ?chroma=alpha
+  y te ahorras el problema entero.
+
+
+PARAMETROS DE URL
+
+  ?chroma=verde     fondo #00FF00  (por defecto)
+  ?chroma=magenta   fondo #FF00FF
+  ?chroma=azul      fondo #0000FF
+  ?chroma=alpha     transparente, sin chroma
+  ?scale=0.8        encoger todo

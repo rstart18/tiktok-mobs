@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Catalogo lateral</title>
+<!--
+  Catalogo lateral con CHROMA KEY  ·  420 x 1250
+
+  Iconos: si existe la carpeta  iconos\  (creada por extraer-iconos.ps1) usa las
+  texturas de tu propio Minecraft. Si no, cae a iconos pixel propios, asi la
+  pagina se ve bien desde el primer momento.
+
+  OJO CON EL CHROMA: el fondo es verde puro #00FF00 y en el contenido NO hay
+  ni un verde. Por eso los efectos van en cian y no en el verde de Minecraft:
+  si fueran verdes, el chroma se los comeria junto con el fondo.
+
+  Parametros de URL:
+    ?chroma=magenta   fondo #FF00FF en vez de verde
+    ?chroma=azul      fondo #0000FF
+    ?chroma=alpha     fondo transparente (si tu programa admite PNG con alfa,
+                      esto es mejor que el chroma: no deja bordes verdes)
+    ?scale=0.8        escala todo
+-->
+<style>
+  :root{
+    --blanco:#ffffff;
+    --gris:#cccccc;
+    --cian:#55ffff;
+    --amarillo:#ffff55;
+    --oro:#ffaa00;
+    --morado:#ff55ff;
+    --rojo:#ff5555;
+    --chroma:#00ff00;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html{background:var(--chroma);}
+  body{
+    width:420px;height:676px;overflow:hidden;
+    background:var(--chroma);
+    font-family:"Minecraft","Monocraft","Press Start 2P",ui-monospace,"DejaVu Sans Mono","Courier New",monospace;
+    color:var(--blanco);
+    -webkit-font-smoothing:none;
+    padding:12px;
+    display:flex;flex-direction:column;gap:4px;
+  }
+
+  /* Sin paneles: el contorno es lo unico que mantiene el texto legible sobre
+     el juego. Ocho sombras negras alrededor + una dura abajo a la derecha. */
+  .sh{
+    text-shadow:
+      -2px -2px 0 #000,  0   -2px 0 #000,  2px -2px 0 #000,
+      -2px  0   0 #000,                    2px  0   0 #000,
+      -2px  2px 0 #000,  0    2px 0 #000,  2px  2px 0 #000,
+       4px  4px 0 rgba(0,0,0,.75);
+  }
+
+  header{text-align:center;margin-bottom:2px;}
+  header .t{font-size:23px;letter-spacing:1px;color:var(--oro);line-height:1.15;}
+  header .s{font-size:14px;color:var(--gris);margin-top:5px;}
+
+  .lista{flex:0 0 auto;display:flex;flex-direction:column;gap:11px;}
+
+  .fila{display:flex;align-items:center;gap:12px;}
+  .fila .ico{
+    flex:0 0 auto;width:58px;height:58px;
+    display:flex;align-items:center;justify-content:center;
+  }
+  .fila .ico img{
+    width:100%;height:100%;image-rendering:auto;object-fit:contain;
+    /* Sin panel detras, el enderman y el warden se comerian con cualquier fondo
+       oscuro del juego: el halo los separa siempre. */
+    /* Contorno blanco de 1px, no un resplandor: el enderman y el warden son
+       casi negros y sin esto desaparecen sobre cualquier escena oscura.
+       Un halo suave se veia sucio sobre el fondo plano del chroma. */
+    filter: drop-shadow( 1px  0   0 rgba(255,255,255,.92))
+            drop-shadow(-1px  0   0 rgba(255,255,255,.92))
+            drop-shadow( 0    1px 0 rgba(255,255,255,.92))
+            drop-shadow( 0   -1px 0 rgba(255,255,255,.92))
+            drop-shadow( 3px  3px 0 rgba(0,0,0,.65));
+  }
+  .fila .ico svg{filter: drop-shadow(2px 2px 0 rgba(0,0,0,.85));}
+
+  .fila .txt{flex:1;min-width:0;}
+  .fila .rango{font-size:22px;line-height:1.1;white-space:nowrap;}
+  .fila .efecto{font-size:17px;color:var(--cian);line-height:1.2;margin-top:2px;}
+
+  /* El color del texto marca el valor, ya que no hay bordes de tarjeta. */
+  .fila[data-t="rare"]   .rango{color:var(--cian);}
+  .fila[data-t="epic"]   .rango{color:var(--oro);}
+  .fila[data-t="legend"] .rango{color:var(--morado);}
+
+  footer{display:flex;flex-direction:column;gap:4px;margin-top:6px;}
+
+  /* ----------------------------------------------------------------------
+     LAYOUT ANCHO  (?layout=ancho)  ·  1080 de ancho, banda centrada
+     Mismo contenido en rejilla de 4x2 en vez de columna.
+     ---------------------------------------------------------------------- */
+  body[data-layout="ancho"]{
+    width:1080px;height:auto;
+    padding:18px 26px 20px;
+    gap:10px;
+  }
+  body[data-layout="ancho"] header .t{font-size:34px;}
+  body[data-layout="ancho"] header .s{font-size:18px;margin-top:7px;}
+
+  body[data-layout="ancho"] .lista{
+    display:grid;
+    grid-template-columns:repeat(4,1fr);
+    gap:16px 20px;
+  }
+  /* min-height para que las dos filas de la rejilla queden alineadas
+     aunque un texto ocupe dos lineas. */
+  body[data-layout="ancho"] .fila{gap:10px;align-items:center;min-height:74px;}
+  body[data-layout="ancho"] .fila .ico{width:58px;height:58px;}
+  body[data-layout="ancho"] .fila .rango{font-size:23px;}
+  body[data-layout="ancho"] .fila .efecto{font-size:16px;white-space:normal;}
+
+  body[data-layout="ancho"] footer{
+    flex-direction:row;justify-content:center;align-items:center;
+    gap:30px;flex-wrap:wrap;margin-top:10px;
+  }
+  body[data-layout="ancho"] footer .it{font-size:18px;}
+  body[data-layout="ancho"] footer .it .ico{width:28px;height:28px;}
+  footer .it{display:flex;align-items:center;gap:8px;font-size:17px;white-space:nowrap;}
+  footer .it .ico{width:26px;height:26px;flex:0 0 auto;}
+  footer .it .ico svg{filter: drop-shadow(2px 2px 0 rgba(0,0,0,.85));}
+  footer .it b{font-weight:normal;color:var(--cian);}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="t sh">QUE HACE TU REGALO</div>
+  <div class="s sh">cada moneda cuenta</div>
+</header>
+
+<div class="lista" id="lista"></div>
+
+<footer id="gratis"></footer>
+
+<script>
+(function(){
+  "use strict";
+
+  var params = new URLSearchParams(location.search);
+  var CHROMA = (params.get("chroma") || "verde").toLowerCase();
+  var SCALE  = parseFloat(params.get("scale") || "1") || 1;
+
+  var LAYOUT = (params.get("layout") || "lateral").toLowerCase();
+  document.body.setAttribute("data-layout", LAYOUT);
+
+  var FONDOS = { verde:"#00ff00", magenta:"#ff00ff", azul:"#0000ff", alpha:"transparent" };
+  var fondo = FONDOS[CHROMA] || FONDOS.verde;
+  document.documentElement.style.background = fondo;
+  document.body.style.background = fondo;
+
+  if (SCALE !== 1) {
+    document.body.style.transformOrigin = "top left";
+    document.body.style.transform = "scale(" + SCALE + ")";
+  }
+
+  // --------------------------------------------------- iconos de respaldo
+  // Pixel art propio. Se usa solo si no existe iconos\<nombre>.png
+  function svg(cells, pal){
+    var r = "";
+    for (var i = 0; i < cells.length; i++)
+      for (var j = 0; j < cells[i].length; j++){
+        var k = cells[i].charAt(j);
+        if (k === ".") continue;
+        r += '<rect x="'+j+'" y="'+i+'" width="1" height="1" fill="'+pal[k]+'"/>';
+      }
+    return '<svg viewBox="0 0 8 8" width="100%" height="100%" shape-rendering="crispEdges">'+r+'</svg>';
+  }
+
+  var FORMAS = {
+    moneda : ["..1111..",".111111.","11.11.11","11.11.11","11.11.11","11.11.11",".111111.","..1111.."],
+    ojos   : ["..1111..","..1111..",".111111.",".121121.",".111111.","..1111..","..1..1..","..1..1.."],
+    rombo  : ["...11...","..1221..",".122221.","12222221",".122221.","..1221..","...11...","........"],
+    corona : ["........","1..1..1.","11.11.11","11111111","11111111",".111111.",".111111.","........"],
+    craneo : [".111111.","11111111","1.1111.1","11111111","1.1..1.1","11111111",".1.11.1.","........"],
+    corazon: [".11..11.","11111111","11111111","11111111",".111111.","..1111..","...11...","........"],
+    flecha : ["....1...","....11..","1111111.","11111111","1111111.","....11..","....1...","........"],
+    bandera: [".1......",".111111.",".111111.",".1111...",".1......",".1......",".1......",".11111.."]
+  };
+
+  var C = { blanco:"#ffffff", gris:"#aaaaaa", cian:"#55ffff", oro:"#ffaa00",
+            morado:"#ff55ff", rojo:"#ff5555", amarillo:"#ffff55" };
+
+  // Monta el icono: intenta la textura real, y si no carga usa el de respaldo.
+  function icono(host, archivo, forma, pal){
+    if (archivo) {
+      var img = new Image();
+      img.alt = "";
+      img.onerror = function(){ host.innerHTML = svg(FORMAS[forma], pal); };
+      img.src = "iconos/" + archivo + ".png";
+      host.appendChild(img);
+    } else {
+      host.innerHTML = svg(FORMAS[forma], pal);
+    }
+  }
+
+  // --------------------------------------------------- contenido
+  var FILAS = [
+    { img:"husk",     forma:"moneda", pal:{"1":C.gris},   rango:"1 a 29",     efecto:"1 zombi por moneda", t:"" },
+    { img:"spider",   forma:"moneda", pal:{"1":C.gris},   rango:"30 a 99",    efecto:"aranias",            t:"" },
+    { img:"creeper",  forma:"moneda", pal:{"1":C.cian},   rango:"100 a 299",  efecto:"creepers",           t:"rare" },
+    { img:"enderman", forma:"ojos",   pal:{"1":"#241a33","2":"#c77dff"}, rango:"300 a 999", efecto:"4 ENDERMAN", t:"epic" },
+    { img:"tnt",      forma:"rombo",  pal:{"1":C.oro,"2":C.amarillo},    rango:"1.000+",    efecto:"lluvia de TNT", t:"epic" },
+    { img:"ravager",  forma:"corona", pal:{"1":C.oro},    rango:"3.000+",     efecto:"JEFE ravager",       t:"legend" },
+    { img:"warden",   forma:"craneo", pal:{"1":C.morado}, rango:"10.000+",    efecto:"JEFE warden",        t:"legend" }
+  ];
+
+  var GRATIS = [
+    { forma:"corazon", pal:{"1":C.rojo},     txt:"100 likes", fx:"velocidad" },
+    { forma:"rombo",   pal:{"1":C.cian,"2":C.blanco}, txt:"seguirme", fx:"1 allay" },
+    { forma:"flecha",  pal:{"1":C.amarillo}, txt:"compartir", fx:"loot" },
+    { forma:"bandera", pal:{"1":C.oro},      txt:"meta 1.000", fx:"WITHER" }
+  ];
+
+  // En la rejilla de 4x2 sobra una celda: la usamos para empujar los combos.
+  if (LAYOUT === "ancho") {
+    // En las celdas estrechas de la rejilla este texto se partia en dos lineas.
+    FILAS[0].efecto = "1 zombi x moneda";
+    FILAS.push({ img:null, forma:"corazon", pal:{"1":C.rojo},
+                 rango:"MAS REGALOS", efecto:"MAS MOBS", t:"rare" });
+  }
+
+  var lista = document.getElementById("lista");
+  FILAS.forEach(function(f){
+    var el = document.createElement("div");
+    el.className = "fila";
+    if (f.t) el.setAttribute("data-t", f.t);
+
+    var ico = document.createElement("div");
+    ico.className = "ico";
+    icono(ico, f.img, f.forma, f.pal);
+
+    var txt = document.createElement("div");
+    txt.className = "txt";
+
+    var rango = document.createElement("div");
+    rango.className = "rango sh";
+    rango.textContent = f.rango;
+
+    var efecto = document.createElement("div");
+    efecto.className = "efecto sh";
+    efecto.textContent = "» " + f.efecto;
+
+    txt.appendChild(rango); txt.appendChild(efecto);
+    el.appendChild(ico); el.appendChild(txt);
+    lista.appendChild(el);
+  });
+
+  var gratis = document.getElementById("gratis");
+  GRATIS.forEach(function(g){
+    var it = document.createElement("div");
+    it.className = "it sh";
+
+    var ico = document.createElement("div");
+    ico.className = "ico";
+    ico.innerHTML = svg(FORMAS[g.forma], g.pal);
+
+    var txt = document.createElement("span");
+    txt.textContent = g.txt + " ";
+
+    var b = document.createElement("b");
+    b.textContent = "» " + g.fx;
+
+    it.appendChild(ico); it.appendChild(txt); it.appendChild(b);
+    gratis.appendChild(it);
+  });
+})();
+</script>
+</body>
+</html>
