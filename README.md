@@ -291,6 +291,48 @@ pegado encima de la bandeja de regalos de TikTok, con versión chroma y transpar
 
 ---
 
+## Para tus amigos: las tres formas de entrar
+
+Depende de lo que quieran hacer. Solo la tercera tiene algo de trabajo.
+
+### A) Solo jugar en tu servidor
+
+**No instalan nada.** Abren Minecraft, Multijugador, y ponen la dirección que les pases.
+El plugin corre en tu servidor, no en su cliente. Los de Bedrock entran por Geyser.
+
+### B) Jugar Y que sus donaciones cuenten
+
+Para que los regalos de **su** live también suelten mobs en tu mundo:
+
+1. Instalan **TikFinity** y vinculan su cuenta de TikTok.
+2. Bajan la carpeta `relay/` de este repo y hacen doble clic en `relay.bat`.
+3. Les pide tres datos la primera vez: la dirección de tu servidor, su id de streamer y el
+   token. Los tres se los pasas tú.
+
+El relay no instala nada —usa el PowerShell que ya trae Windows— y **solo hace conexiones de
+salida**: no abren puertos ni montan túneles. Instrucciones completas en `relay/LEEME.txt`.
+
+Tú tienes que añadirlos a `sources` en tu `config.yml`:
+
+```yaml
+sources:
+  - id: pana          # el id que le pasas a el
+    url: ""           # vacio = modo relay, el empuja hacia ti
+    player: "SuNombreEnMinecraft"   # opcional: sus donaciones le salen a EL
+```
+
+### C) Montar su propio servidor
+
+Si quieren su live con su mundo, aparte del tuyo:
+
+1. Un servidor **Paper 26.2** con **Java 25**.
+2. El `TikTokMobs.jar` de la pestaña **Releases** de este repo, en `plugins/`.
+3. Arrancar una vez, poner `source.type: tikfinity` en el config, y `/ttmobs reload`.
+
+A partir de ahí es su servidor y su catálogo: el panel web y todo lo demás funcionan igual.
+
+---
+
 ## Varios streamers en el mismo servidor
 
 Tus amigos **no instalan nada del plugin**. Corren el relay de `relay/`, que es un script de
