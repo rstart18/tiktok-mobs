@@ -128,13 +128,22 @@ public final class LedgerStore {
             if (!plugin.getDataFolder().exists() && !plugin.getDataFolder().mkdirs()) return;
 
             YamlConfiguration yaml = new YamlConfiguration();
-            // C8 solo lee los dos formatos; el escritor sigue en el plano del live "main"
-            // hasta C9, para que un rollback del codigo nuevo pueda releer este archivo.
-            yaml.set("likes", resolver.likes().total());
-            yaml.set("total-coins", resolver.ledger().totalCoins());
-            yaml.set("chaos-level", resolver.chaos().level());
-            yaml.set("chaos-donations", resolver.chaos().donations());
 
+            // Un bloque por live, bajo 'streamers.<id>.*'. Si el servidor solo tiene el live
+            // "main", el archivo queda con una sola entrada y se vuelve a leer igual.
+            for (String streamerId : resolver.streamerIds()) {
+                String ruta = "streamers." + streamerId + ".";
+                yaml.set(ruta + "likes", resolver.likes(streamerId).total());
+                yaml.set(ruta + "total-coins", resolver.ledger(streamerId).totalCoins());
+                yaml.set(ruta + "chaos-level", resolver.chaos(streamerId).level());
+                yaml.set(ruta + "chaos-donations", resolver.chaos(streamerId).donations());
+
+                resolver.ledger(streamerId).snapshot().forEach((nombre, monedas) ->
+                        yaml.set(ruta + "donors." + nombre, monedas));
+            }
+
+            // Globales, iguales que GiftRegistry: ids y nombres de regalos vistos. No se
+            // reparten por streamer porque el catalogo de TikTok es de la plataforma.
             for (var visto : resolver.gifts().seen()) {
                 String ruta = "gifts-vistos." + visto.id();
                 yaml.set(ruta + ".nombre", visto.name());
@@ -142,8 +151,6 @@ public final class LedgerStore {
                 yaml.set(ruta + ".veces", visto.times());
                 if (!visto.imageUrl().isBlank()) yaml.set(ruta + ".imagen", visto.imageUrl());
             }
-            resolver.ledger().snapshot().forEach((nombre, monedas) ->
-                    yaml.set("donors." + nombre, monedas));
 
             yaml.save(archivo);
         } catch (IOException | RuntimeException ex) {

@@ -11,9 +11,12 @@ import dev.juanse.tiktokmobs.core.event.GiftInfo;
 import dev.juanse.tiktokmobs.core.util.NameSanitizer;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -191,6 +194,13 @@ public final class ActionResolver {
         return nivel == null ? 0 : nivel;
     }
 
+    /**
+     * Los lives con estado en este resolver, en el orden en el que llegaron. Lo usa el
+     * {@code LedgerStore} para guardar cada sesion bajo su propia clave en disco.
+     */
+    public Set<String> streamerIds() {
+        return Collections.unmodifiableSet(new LinkedHashSet<>(sessions.keySet()));
+    }
 
     public MappingTable table() {
         return table;
