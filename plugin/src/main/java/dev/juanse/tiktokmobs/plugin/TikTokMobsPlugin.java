@@ -61,6 +61,7 @@ public final class TikTokMobsPlugin extends JavaPlugin implements Listener {
     private BossManager bossManager;
     private ChatRelay chatRelay = ChatRelay.DISABLED;
     private dev.juanse.tiktokmobs.plugin.runtime.Spectacle spectacle;
+    private dev.juanse.tiktokmobs.plugin.config.CatalogStore catalogStore;
     private GoalBar goalBar;
     private DonorBoard donorBoard;
 
@@ -107,7 +108,13 @@ public final class TikTokMobsPlugin extends JavaPlugin implements Listener {
     // ---------------------------------------------------------------- ciclo de vida
 
     private void bootstrap() {
-        settings = ConfigLoader.load(getConfig(), getLogger());
+        // El panel escribe su propio archivo y manda sobre el bloque gift-ids del config.
+        if (catalogStore == null) {
+            catalogStore = new dev.juanse.tiktokmobs.plugin.config.CatalogStore(this);
+        } else {
+            catalogStore.recargar();
+        }
+        settings = ConfigLoader.load(getConfig(), catalogStore.giftIds(), getLogger());
 
         spawnRegistry = new SpawnRegistry(settings.maxLiveSpawned());
         targets = new TargetResolver(settings);
@@ -205,6 +212,12 @@ public final class TikTokMobsPlugin extends JavaPlugin implements Listener {
         }
 
         overlayFeed = new OverlayFeed(overlayServer, settings.overlayAlertMinCoins());
+
+        var panel = new dev.juanse.tiktokmobs.plugin.overlay.PanelService(this, catalogStore);
+        overlayServer.setPanel(panel);
+        getLogger().info("[panel] configurador del catalogo en http://"
+                + settings.overlayBind() + ":" + overlayServer.boundPort()
+                + "/panel?token=" + panel.token());
 
         overlayStateTask = Bukkit.getScheduler().runTaskTimer(this, () -> {
             String json = overlayFeed.publishState(
@@ -365,6 +378,11 @@ public final class TikTokMobsPlugin extends JavaPlugin implements Listener {
 
     public java.util.Set<String> bossIds() {
         return settings.bosses().keySet();
+    }
+
+    /** Los mapeos por id que están activos ahora mismo. Para el panel web. */
+    public java.util.Map<Integer, dev.juanse.tiktokmobs.core.action.ActionSpec> mappingByGiftId() {
+        return settings.mapping().byGiftId();
     }
 
     public void resetLedger() {

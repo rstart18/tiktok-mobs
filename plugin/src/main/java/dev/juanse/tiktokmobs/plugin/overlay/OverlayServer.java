@@ -46,6 +46,34 @@ public final class OverlayServer {
     private final String token;
     private final Supplier<String> stateSupplier;
     private final Supplier<String> catalogSupplier;
+
+    /**
+     * El panel de configuración, si está cableado.
+     *
+     * <p>Va con su <b>propio token</b> y no con el del overlay: el del overlay se pega en una
+     * browser source de OBS y acaba en cualquier captura de pantalla del directo, mientras que
+     * este abre la puerta a reconfigurar el servidor. No pueden ser el mismo.
+     */
+    private volatile PanelHooks panel;
+
+    /** Lo que el panel necesita del plugin, sin que el servidor HTTP sepa de Bukkit. */
+    public interface PanelHooks {
+        /** Token obligatorio. Sin él, el panel no se sirve. */
+        String token();
+
+        /** JSON con los regalos vistos, los mapeos actuales y las opciones. */
+        String data();
+
+        /** @return mensaje para enseñar en el panel. Corre en el hilo principal. */
+        String save(String json);
+
+        /** Dispara una donación de prueba por id. */
+        String test(int giftId, int coins);
+    }
+
+    public void setPanel(PanelHooks panel) {
+        this.panel = panel;
+    }
     /** (streamerId, json crudo de TikFinity) -> lo mete en la cola del plugin. */
     private volatile java.util.function.BiConsumer<String, String> ingest = (a, b) -> { };
 
@@ -93,6 +121,7 @@ public final class OverlayServer {
         server.createContext("/ingest", this::handleIngest);
         server.createContext("/events", this::handleEvents);
         server.createContext("/health", this::handleHealth);
+        server.createContext("/panel", this::handlePanel);
         server.setExecutor(Executors.newFixedThreadPool(3, daemons));
         server.start();
 
@@ -271,6 +300,84 @@ public final class OverlayServer {
         String state = stateSupplier == null ? null : stateSupplier.get();
         if (state != null && !client.send(state)) {
             drop(client);
+        }
+    }
+
+    /**
+     * Todo lo del panel: la página, sus datos, el guardado y las pruebas.
+     *
+     * <p>La autorización es <b>aparte</b> de la del overlay y no se puede desactivar. El puerto
+     * del overlay acaba abierto a internet para que lleguen los relays de otros streamers, así
+     * que un panel sin token sería una consola de administración pública.
+     *
+     * <p>Ojo con un detalle que engaña: cuando el tráfico entra por un túnel (playit, ngrok),
+     * el cliente que ve el servidor es el túnel, que corre en la misma máquina. Mirar si la
+     * petición viene de 127.0.0.1 NO distingue "yo" de "internet". Por eso: token, siempre.
+     */
+    private void handlePanel(HttpExchange exchange) throws IOException {
+        PanelHooks hooks = panel;
+        if (hooks == null) {
+            enviarTexto(exchange, 503, "El panel no está activo.");
+            return;
+        }
+
+        String esperado = hooks.token();
+        if (esperado == null || esperado.isBlank()
+                || !esperado.equals(queryParam(exchange.getRequestURI(), "token"))) {
+            enviarTexto(exchange, 401, "Token del panel incorrecto o ausente.");
+            return;
+        }
+
+        String path = exchange.getRequestURI().getPath();
+        try {
+            switch (path) {
+                case "/panel", "/panel/" -> sendHtml(exchange, page("/overlay/panel.html"));
+                case "/panel/data" -> enviarJson(exchange, hooks.data());
+                case "/panel/save" -> enviarJson(exchange, hooks.save(leerCuerpo(exchange)));
+                case "/panel/test" -> {
+                    int id = entero(queryParam(exchange.getRequestURI(), "id"), 0);
+                    int coins = entero(queryParam(exchange.getRequestURI(), "coins"), 1);
+                    enviarJson(exchange, hooks.test(id, coins));
+                }
+                default -> enviarTexto(exchange, 404, "No existe " + path);
+            }
+        } catch (RuntimeException ex) {
+            log.warning("[panel] " + path + " falló: " + ex);
+            enviarJson(exchange, "{\"ok\":false,\"mensaje\":\"Error en el servidor\"}");
+        }
+    }
+
+    private static int entero(String raw, int fallback) {
+        try {
+            return Integer.parseInt(raw == null ? "" : raw.trim());
+        } catch (NumberFormatException ex) {
+            return fallback;
+        }
+    }
+
+    private String leerCuerpo(HttpExchange exchange) throws IOException {
+        try (InputStream in = exchange.getRequestBody()) {
+            // Techo: el catálogo entero son unos pocos KB. Más que eso no es un catálogo.
+            return new String(in.readNBytes(256 * 1024), StandardCharsets.UTF_8);
+        }
+    }
+
+    private void enviarJson(HttpExchange exchange, String json) throws IOException {
+        byte[] body = (json == null ? "{}" : json).getBytes(StandardCharsets.UTF_8);
+        exchange.getResponseHeaders().set("Content-Type", "application/json; charset=utf-8");
+        exchange.getResponseHeaders().set("Cache-Control", "no-store");
+        exchange.sendResponseHeaders(200, body.length);
+        try (OutputStream out = exchange.getResponseBody()) {
+            out.write(body);
+        }
+    }
+
+    private void enviarTexto(HttpExchange exchange, int codigo, String texto) throws IOException {
+        byte[] body = texto.getBytes(StandardCharsets.UTF_8);
+        exchange.getResponseHeaders().set("Content-Type", "text/plain; charset=utf-8");
+        exchange.sendResponseHeaders(codigo, body.length);
+        try (OutputStream out = exchange.getResponseBody()) {
+            out.write(body);
         }
     }
 

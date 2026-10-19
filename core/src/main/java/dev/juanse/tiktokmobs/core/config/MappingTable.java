@@ -138,6 +138,11 @@ public final class MappingTable {
         return tiers;
     }
 
+    /** Los mapeos por id, tal como quedaron tras mezclar config y panel. Lo usa el panel web. */
+    public Map<Integer, ActionSpec> byGiftId() {
+        return byGiftId;
+    }
+
     public static final class Builder {
         private final Map<Integer, ActionSpec> byGiftId = new HashMap<>();
         private final Map<String, ActionSpec> byGiftName = new HashMap<>();

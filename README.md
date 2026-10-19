@@ -220,6 +220,40 @@ se puede falsificar una línea de chat.
 
 ---
 
+## Panel del catálogo
+
+Una página web para configurar qué hace cada regalo, sin tocar el YAML:
+
+```
+http://127.0.0.1:8787/panel?token=...
+```
+
+El token sale en la consola al arrancar:
+
+```
+[panel] configurador del catalogo en http://127.0.0.1:8787/panel?token=a3f9...
+```
+
+Una fila por regalo que haya entrado en la sesión, con su **id real**. Eliges acción (mobs,
+horda, jefe, item, evento), qué sale, las cantidades, y guardas: escribe el archivo y recarga
+el plugin solo, sin reiniciar el servidor. Cada fila tiene un botón **Probar** que inyecta esa
+donación para ver qué pasa.
+
+Dos decisiones del diseño que conviene conocer:
+
+**El panel escribe `catalogo.yml`, no `config.yml`.** El escritor de YAML de Bukkit no conserva
+comentarios, así que guardar sobre el config borraría toda su documentación. El panel tiene su
+propio archivo, y lo que hay ahí **manda** sobre el bloque `gift-ids` del config.
+
+**El token no es opcional y se genera solo.** El panel reconfigura y recarga el servidor, y el
+puerto del overlay acaba expuesto a internet para que lleguen los relays. Ojo con un detalle
+que engaña: cuando el tráfico entra por un túnel (playit, ngrok), el cliente que ve el servidor
+es el túnel, que corre en la misma máquina — mirar si viene de `127.0.0.1` **no** distingue
+"yo" de "internet". Por eso: token siempre, y distinto del de la browser source de OBS, que
+acaba en cualquier captura del directo.
+
+---
+
 ## Overlay para OBS
 
 El plugin sirve una página y le empuja los eventos por SSE.

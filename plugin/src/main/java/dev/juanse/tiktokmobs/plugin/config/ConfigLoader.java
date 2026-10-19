@@ -20,6 +20,30 @@ public final class ConfigLoader {
     }
 
     public static PluginSettings load(FileConfiguration cfg, Logger log) {
+        return load(cfg, null, log);
+    }
+
+    /**
+     * @param panelGiftIds el bloque 'gift-ids' que escribió el panel web, o null.
+     *                     Se aplica DESPUÉS del config, así que manda sobre él.
+     */
+    public static PluginSettings load(FileConfiguration cfg, ConfigurationSection panelGiftIds,
+                                      Logger log) {
+        PANEL_GIFT_IDS.set(panelGiftIds);
+        try {
+            return construir(cfg, log);
+        } finally {
+            PANEL_GIFT_IDS.remove();
+        }
+    }
+
+    /**
+     * Se pasa por un ThreadLocal y no por parámetro para no arrastrar el bloque del panel por
+     * toda la cadena de métodos privados, que ya tiene bastantes argumentos.
+     */
+    private static final ThreadLocal<ConfigurationSection> PANEL_GIFT_IDS = new ThreadLocal<>();
+
+    private static PluginSettings construir(FileConfiguration cfg, Logger log) {
         PluginSettings.SourceType sourceType = enumOf(
                 PluginSettings.SourceType.class,
                 cfg.getString("source.type", "fake"),
@@ -163,38 +187,15 @@ public final class ConfigLoader {
 
         ConfigurationSection giftIds = cfg.getConfigurationSection("gift-ids");
         if (giftIds != null) {
-            // Se registra lo que ENTRA de verdad. Un mapeo que se cae en silencio es la peor
-            // clase de fallo: en vivo solo ves que "ese regalo no hace nada" y a ciegas puedes
-            // pasarte dos directos culpando al regalo equivocado.
-            List<String> cargados = new java.util.ArrayList<>();
-
-            for (String rawId : giftIds.getKeys(false)) {
-                int id;
-                try {
-                    id = Integer.parseInt(rawId.trim());
-                } catch (NumberFormatException ex) {
-                    log.warning("[config] gift-ids." + rawId + " no es un id numérico: ignorado");
-                    continue;
-                }
-
-                ConfigurationSection section = giftIds.getConfigurationSection(rawId);
-                if (section == null) {
-                    log.warning("[config] gift-ids." + rawId + " no se pudo leer como bloque. "
-                            + "¿Usaste una referencia YAML (*algo)? Escribe el bloque completo.");
-                    continue;
-                }
-
-                ActionSpec spec = spec(section, log, "gift-ids." + rawId);
-                if (spec == null) continue;
-
-                builder.gift(id, spec);
-                cargados.add(id + "=" + spec.describe());
-            }
-
-            log.info("[config] gift-ids cargados (" + cargados.size() + "): "
-                    + String.join(", ", cargados));
+            leerGiftIds(giftIds, builder, log, "config");
         } else {
             log.info("[config] no hay bloque 'gift-ids': todo depende de los nombres y los tramos");
+        }
+
+        // El panel va DESPUÉS a propósito: lo que se toca desde la web manda sobre el config.
+        ConfigurationSection panel = PANEL_GIFT_IDS.get();
+        if (panel != null) {
+            leerGiftIds(panel, builder, log, "panel");
         }
 
         List<Map<?, ?>> tiers = cfg.getMapList("tiers");
@@ -225,6 +226,44 @@ public final class ConfigLoader {
                     + "no harán nada. Define al menos un tramo.");
         }
         return table;
+    }
+
+    /**
+     * Lee un bloque de mapeos por id y lo mete en la tabla.
+     *
+     * <p>Registra en el log lo que ENTRA de verdad. Un mapeo que se cae en silencio es la peor
+     * clase de fallo: en vivo solo ves que "ese regalo no hace nada", y a ciegas te puedes
+     * pasar dos directos culpando al regalo equivocado.
+     */
+    private static void leerGiftIds(ConfigurationSection giftIds, MappingTable.Builder builder,
+                                    Logger log, String origen) {
+        List<String> cargados = new java.util.ArrayList<>();
+
+        for (String rawId : giftIds.getKeys(false)) {
+            int id;
+            try {
+                id = Integer.parseInt(rawId.trim());
+            } catch (NumberFormatException ex) {
+                log.warning("[" + origen + "] gift-ids." + rawId + " no es un id numérico: ignorado");
+                continue;
+            }
+
+            ConfigurationSection section = giftIds.getConfigurationSection(rawId);
+            if (section == null) {
+                log.warning("[" + origen + "] gift-ids." + rawId + " no se pudo leer como bloque. "
+                        + "¿Usaste una referencia YAML (*algo)? Escribe el bloque completo.");
+                continue;
+            }
+
+            ActionSpec spec = spec(section, log, origen + ".gift-ids." + rawId);
+            if (spec == null) continue;
+
+            builder.gift(id, spec);
+            cargados.add(id + "=" + spec.describe());
+        }
+
+        log.info("[" + origen + "] gift-ids cargados (" + cargados.size() + "): "
+                + String.join(", ", cargados));
     }
 
     private static ActionSpec spec(ConfigurationSection section, Logger log, String path) {

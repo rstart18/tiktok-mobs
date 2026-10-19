@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Catalogo - TikTokMobs</title>
+<!--
+  PANEL DEL CATALOGO
+
+  Una fila por regalo visto en esta sesion. Se edita que hace cada uno y se guarda:
+  el plugin escribe catalogo.yml y recarga solo, sin reiniciar el servidor.
+
+  Lo que se guarda aqui MANDA sobre el bloque gift-ids del config.yml, que no se
+  toca nunca para no perder sus comentarios.
+-->
+<style>
+  :root{
+    --fondo:#15171c;
+    --panel:#1e2128;
+    --borde:#2c313b;
+    --texto:#e8eaed;
+    --suave:#9aa3b0;
+    --oro:#ffb02e;
+    --verde:#49c06a;
+    --rojo:#e5484d;
+    --azul:#4a9eff;
+  }
+  @media (prefers-color-scheme: light){
+    :root:not([data-theme="dark"]){
+      --fondo:#f4f5f7; --panel:#ffffff; --borde:#d9dce1;
+      --texto:#1a1d23; --suave:#5d6673;
+    }
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;padding:24px 16px 80px;
+    background:var(--fondo);color:var(--texto);
+    font:15px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  }
+  .envoltorio{max-width:1200px;margin:0 auto;}
+
+  header h1{margin:0 0 4px;font-size:24px;letter-spacing:-.01em;}
+  header p{margin:0 0 20px;color:var(--suave);font-size:14px;}
+
+  .aviso{
+    background:var(--panel);border:1px solid var(--borde);border-left:3px solid var(--oro);
+    border-radius:8px;padding:12px 14px;margin-bottom:20px;font-size:14px;color:var(--suave);
+  }
+  .aviso b{color:var(--texto);}
+
+  .tabla{
+    background:var(--panel);border:1px solid var(--borde);
+    border-radius:10px;overflow:hidden;
+  }
+  .fila{
+    display:grid;
+    grid-template-columns:150px 120px 1.4fr 70px 80px 80px 1fr 110px;
+    gap:10px;align-items:center;
+    padding:10px 14px;border-bottom:1px solid var(--borde);
+  }
+  .fila:last-child{border-bottom:none;}
+  .fila.cabecera{
+    font-size:12px;text-transform:uppercase;letter-spacing:.05em;
+    color:var(--suave);background:rgba(127,127,127,.06);position:sticky;top:0;
+  }
+  .regalo .nombre{font-weight:600;}
+  .regalo .meta{font-size:12px;color:var(--suave);font-variant-numeric:tabular-nums;}
+
+  select,input{
+    width:100%;padding:7px 9px;border-radius:6px;
+    border:1px solid var(--borde);background:var(--fondo);color:var(--texto);
+    font:inherit;font-size:14px;
+  }
+  input[type=number]{font-variant-numeric:tabular-nums;}
+  select:focus,input:focus{outline:2px solid var(--azul);outline-offset:-1px;}
+
+  button{
+    padding:7px 12px;border-radius:6px;border:1px solid var(--borde);
+    background:var(--fondo);color:var(--texto);font:inherit;font-size:13px;cursor:pointer;
+  }
+  button:hover{border-color:var(--azul);}
+  button.primario{background:var(--verde);border-color:var(--verde);color:#08210f;font-weight:600;}
+  button.primario:hover{filter:brightness(1.08);}
+
+  .pie{
+    position:fixed;left:0;right:0;bottom:0;
+    background:var(--panel);border-top:1px solid var(--borde);
+    padding:12px 16px;display:flex;gap:12px;align-items:center;justify-content:center;
+  }
+  .pie .estado{color:var(--suave);font-size:14px;min-height:21px;}
+  .pie .estado.ok{color:var(--verde);}
+  .pie .estado.mal{color:var(--rojo);}
+
+  .vacio{padding:40px 20px;text-align:center;color:var(--suave);}
+  .vacio code{
+    background:var(--fondo);padding:2px 6px;border-radius:4px;
+    border:1px solid var(--borde);font-size:13px;
+  }
+
+  @media (max-width:900px){
+    .fila{grid-template-columns:1fr 1fr;gap:8px;padding:14px;}
+    .fila.cabecera{display:none;}
+    .fila .regalo{grid-column:1 / -1;}
+    .fila .mensaje{grid-column:1 / -1;}
+  }
+</style>
+</head>
+<body>
+<div class="envoltorio">
+  <header>
+    <h1>Catálogo de regalos</h1>
+    <p>Qué hace cada regalo de tu live. Se guarda y recarga sin reiniciar el servidor.</p>
+  </header>
+
+  <div class="aviso">
+    Aquí solo salen los regalos que <b>ya han entrado al menos una vez</b> en esta sesión: el
+    plugin aprende su id cuando alguien los manda. Si falta uno, pide que lo donen (o usa
+    <b>/ttmobs test</b>) y recarga esta página.
+  </div>
+
+  <div class="tabla" id="tabla"></div>
+</div>
+
+<div class="pie">
+  <span class="estado" id="estado"></span>
+  <button id="recargar">Recargar</button>
+  <button class="primario" id="guardar">Guardar y aplicar</button>
+</div>
+
+<script>
+const TOKEN = new URLSearchParams(location.search).get('token') || '';
+const $ = id => document.getElementById(id);
+
+let datos = {regalos: [], mapeos: {}, opciones: {}};
+
+const ACCIONES = [
+  {valor:'', texto:'— nada —'},
+  {valor:'spawn', texto:'Mobs'},
+  {valor:'horde', texto:'Horda'},
+  {valor:'boss', texto:'Jefe'},
+  {valor:'give', texto:'Dar item'},
+  {valor:'world_event', texto:'Evento'},
+];
+
+/* Qué lista de opciones toca según la acción elegida. */
+function opcionesDe(accion){
+  const o = datos.opciones || {};
+  switch(accion){
+    case 'spawn': case 'horde': return o.mobs || [];
+    case 'give': return o.items || [];
+    case 'world_event': return o.eventos || [];
+    case 'boss': return [...(o.jefes || []), ...(o.mobs || [])];
+    default: return [];
+  }
+}
+
+function estado(texto, clase){
+  const nodo = $('estado');
+  nodo.textContent = texto;
+  nodo.className = 'estado' + (clase ? ' ' + clase : '');
+}
+
+async function cargar(){
+  estado('Cargando...');
+  try{
+    const resp = await fetch('/panel/data?token=' + encodeURIComponent(TOKEN));
+    if(!resp.ok) throw new Error(resp.status === 401 ? 'Token incorrecto' : 'Error ' + resp.status);
+    datos = await resp.json();
+    pintar();
+    estado('');
+  }catch(e){
+    estado(e.message, 'mal');
+  }
+}
+
+function pintar(){
+  const tabla = $('tabla');
+  tabla.innerHTML = '';
+
+  if(!datos.regalos.length){
+    tabla.innerHTML = `<div class="vacio">
+      Todavía no ha entrado ningún regalo en esta sesión.<br>
+      Prueba con <code>/ttmobs test Rosa 1</code> y recarga.
+    </div>`;
+    return;
+  }
+
+  tabla.appendChild(fila(['Regalo','Acción','Qué sale','Mín.','Por moneda','Máx.','Mensaje',''], true));
+
+  // De más barato a más caro: el mismo orden que la bandeja de TikTok.
+  const ordenados = [...datos.regalos].sort((a,b) => a.monedas - b.monedas || a.id - b.id);
+  ordenados.forEach(regalo => tabla.appendChild(filaRegalo(regalo)));
+}
+
+function fila(celdas, cabecera){
+  const div = document.createElement('div');
+  div.className = 'fila' + (cabecera ? ' cabecera' : '');
+  celdas.forEach(texto => {
+    const celda = document.createElement('div');
+    celda.textContent = texto;
+    div.appendChild(celda);
+  });
+  return div;
+}
+
+function filaRegalo(regalo){
+  const actual = datos.mapeos[regalo.id] || {};
+  const div = document.createElement('div');
+  div.className = 'fila';
+  div.dataset.id = regalo.id;
+
+  const info = document.createElement('div');
+  info.className = 'regalo';
+  info.innerHTML = `<div class="nombre"></div><div class="meta"></div>`;
+  info.querySelector('.nombre').textContent = regalo.nombre || ('id ' + regalo.id);
+  info.querySelector('.meta').textContent = `id ${regalo.id} · ${regalo.monedas} monedas · x${regalo.veces}`;
+  div.appendChild(info);
+
+  const accion = selector(ACCIONES.map(a => ({valor:a.valor, texto:a.texto})), actual.action || '');
+  accion.className = 'accion';
+  div.appendChild(envolver(accion));
+
+  const valor = selector([], actual.valor || '');
+  valor.className = 'valor';
+  div.appendChild(envolver(valor));
+
+  const count = numero(actual.count || 1, 1, 'min');
+  const perCoin = numero(actual.perCoin || 0, 0, 'perCoin', 0.01);
+  const maxCount = numero(actual.maxCount || 0, 0, 'max');
+  [count, perCoin, maxCount].forEach(i => div.appendChild(envolver(i)));
+
+  const mensaje = document.createElement('input');
+  mensaje.className = 'mensaje-input';
+  mensaje.placeholder = 'Mensaje en el chat (opcional)';
+  mensaje.value = actual.message || '';
+  const celdaMensaje = envolver(mensaje);
+  celdaMensaje.className = 'mensaje';
+  div.appendChild(celdaMensaje);
+
+  const probar = document.createElement('button');
+  probar.textContent = 'Probar';
+  probar.onclick = () => test(regalo.id, regalo.monedas);
+  div.appendChild(envolver(probar));
+
+  // La lista de "qué sale" depende de la acción, así que se repuebla al cambiarla.
+  const refrescar = () => {
+    const previo = valor.value;
+    rellenar(valor, opcionesDe(accion.value), previo);
+  };
+  accion.onchange = refrescar;
+  refrescar();
+  valor.value = actual.valor || valor.value;
+
+  return div;
+}
+
+function envolver(nodo){
+  const celda = document.createElement('div');
+  celda.appendChild(nodo);
+  return celda;
+}
+
+function selector(opciones, seleccionado){
+  const select = document.createElement('select');
+  rellenar(select, opciones, seleccionado);
+  return select;
+}
+
+function rellenar(select, opciones, seleccionado){
+  select.innerHTML = '';
+  const normalizadas = opciones.map(o => typeof o === 'string' ? {valor:o, texto:o} : o);
+  if(!normalizadas.some(o => o.valor === '')){
+    normalizadas.unshift({valor:'', texto:'—'});
+  }
+  normalizadas.forEach(o => {
+    const option = document.createElement('option');
+    option.value = o.valor;
+    option.textContent = o.texto;
+    select.appendChild(option);
+  });
+  select.value = seleccionado || '';
+}
+
+function numero(valor, min, clase, paso){
+  const input = document.createElement('input');
+  input.type = 'number';
+  input.className = clase;
+  input.min = min;
+  if(paso) input.step = paso;
+  input.value = valor;
+  return input;
+}
+
+async function test(id, monedas){
+  estado('Probando...');
+  try{
+    const url = `/panel/test?token=${encodeURIComponent(TOKEN)}&id=${id}&coins=${monedas || 1}`;
+    const resp = await fetch(url, {method:'POST'});
+    const cuerpo = await resp.json();
+    estado(cuerpo.mensaje, cuerpo.ok ? 'ok' : 'mal');
+  }catch(e){
+    estado('No pude probar: ' + e.message, 'mal');
+  }
+}
+
+async function guardar(){
+  const entradas = [...document.querySelectorAll('.fila:not(.cabecera)')].map(fila => ({
+    id: Number(fila.dataset.id),
+    action: fila.querySelector('.accion').value,
+    valor: fila.querySelector('.valor').value,
+    count: Number(fila.querySelector('.min').value) || 1,
+    perCoin: Number(fila.querySelector('.perCoin').value) || 0,
+    maxCount: Number(fila.querySelector('.max').value) || 0,
+    message: fila.querySelector('.mensaje-input').value,
+    monedas: Number(fila.querySelector('.regalo .meta').textContent.match(/· (\d+) monedas/)?.[1] || 0),
+  }));
+
+  estado('Guardando...');
+  try{
+    const resp = await fetch('/panel/save?token=' + encodeURIComponent(TOKEN), {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({entradas}),
+    });
+    const cuerpo = await resp.json();
+    estado(cuerpo.mensaje, cuerpo.ok ? 'ok' : 'mal');
+
+    // La recarga del plugin levanta de nuevo el servidor HTTP: se espera un momento
+    // antes de volver a pedir los datos, o la peticion cae en el hueco.
+    if(cuerpo.ok) setTimeout(cargar, 1500);
+  }catch(e){
+    estado('No pude guardar: ' + e.message, 'mal');
+  }
+}
+
+$('guardar').onclick = guardar;
+$('recargar').onclick = cargar;
+cargar();
+</script>
+</body>
+</html>
