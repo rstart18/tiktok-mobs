@@ -178,7 +178,7 @@ public final class BukkitActionExecutor implements ActionExecutor {
         Player objetivo = targets.resolvePlayer();
 
         for (int i = 0; i < veces; i++) {
-            if (!WorldEvents.run(id, at, registry, objetivo)) {
+            if (!WorldEvents.run(id, at, registry, objetivo, action.streamerId())) {
                 plugin.getLogger().warning("evento de mundo desconocido: '" + id
                         + "'. Disponibles: " + WorldEvents.AVAILABLE);
                 return false;
@@ -255,7 +255,7 @@ public final class BukkitActionExecutor implements ActionExecutor {
             if (spec.nameplate()) {
                 nameplate(entity, action.donorLabel());
             }
-            registry.track(entity);
+            registry.track(action.streamerId(), entity);
         }
     }
 
@@ -267,7 +267,7 @@ public final class BukkitActionExecutor implements ActionExecutor {
         Entity entity = at.getWorld().spawnEntity(safeSpawn(at, Math.max(spec.radius(), 4), 0, 1), type);
         entity.setGlowing(true);
         nameplate(entity, "Jefe de " + action.donorLabel());
-        registry.track(entity);
+        registry.track(action.streamerId(), entity);
 
         if (!(entity instanceof LivingEntity living)) return;
 

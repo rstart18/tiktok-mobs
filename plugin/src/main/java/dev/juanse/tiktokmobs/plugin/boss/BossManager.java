@@ -453,7 +453,9 @@ public final class BossManager {
 
             // Los esbirros SÍ van al tope normal: son mobs corrientes y deben poder ser
             // evictados como cualquier otro si se acumulan.
-            registry.track(minion);
+            // TODO C7: cuando BossManager pase a mapa por streamer, los esbirros deben ir
+            //          a la cola del live que invocó al jefe, no a la de "main".
+            registry.track("main", minion);
         }
     }
 
