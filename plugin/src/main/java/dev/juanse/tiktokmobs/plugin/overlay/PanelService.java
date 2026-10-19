@@ -74,12 +74,17 @@ public final class PanelService implements OverlayServer.PanelHooks {
             item.addProperty("monedas", visto.coins());
             item.addProperty("veces", visto.times());
             item.addProperty("imagen", visto.imageUrl());
+            item.addProperty("iconoLocal", hayIconoLocal(visto.id()));
             regalos.add(item);
         }
         raiz.add("regalos", regalos);
 
         JsonObject mapeos = new JsonObject();
-        plugin.mappingByGiftId().forEach((id, spec) -> mapeos.add(String.valueOf(id), aJson(spec)));
+        plugin.mappingByGiftId().forEach((id, spec) -> {
+            JsonObject fila = aJson(spec);
+            fila.addProperty("iconoLocal", hayIconoLocal(id));
+            mapeos.add(String.valueOf(id), fila);
+        });
         raiz.add("mapeos", mapeos);
 
         // Los mapeos por nombre del config, uno por clave: "rosa", "rose" y "rosas" salen como
@@ -308,6 +313,40 @@ public final class PanelService implements OverlayServer.PanelHooks {
     }
 
     // ------------------------------------------------------------------ probar
+
+    /**
+     * El png que el usuario haya dejado en {@code plugins/TikTokMobs/iconos/<id>.png}.
+     *
+     * <p>Existe porque la URL del CDN solo se conoce <b>después</b> de que ese regalo haya
+     * entrado una vez: en un servidor recién montado el panel sería una lista de números.
+     * Con esto se ven los iconos desde el primer arranque, y son archivos del propio
+     * usuario — el plugin no descarga ni reparte nada.
+     *
+     * @return null si no hay icono para ese id
+     */
+    @Override
+    public byte[] icono(int giftId) {
+        if (giftId <= 0) return null;
+
+        // El nombre se construye SOLO con el numero: asi no hay forma de que un parametro
+        // de la URL se convierta en un ../.. y acabe sirviendo cualquier archivo del disco.
+        java.io.File archivo = new java.io.File(
+                new java.io.File(plugin.getDataFolder(), "iconos"), giftId + ".png");
+
+        if (!archivo.isFile() || archivo.length() > 2 * 1024 * 1024) return null;
+
+        try {
+            return java.nio.file.Files.readAllBytes(archivo.toPath());
+        } catch (java.io.IOException ex) {
+            return null;
+        }
+    }
+
+    /** true si hay un png puesto para ese id. */
+    private boolean hayIconoLocal(int giftId) {
+        return new java.io.File(
+                new java.io.File(plugin.getDataFolder(), "iconos"), giftId + ".png").isFile();
+    }
 
     @Override
     public String test(int giftId, int coins) {

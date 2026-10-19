@@ -69,6 +69,9 @@ public final class OverlayServer {
 
         /** Dispara una donación de prueba por id. */
         String test(int giftId, int coins);
+
+        /** El png local de ese regalo, o null si no hay ninguno puesto. */
+        byte[] icono(int giftId);
     }
 
     public void setPanel(PanelHooks panel) {
@@ -334,6 +337,20 @@ public final class OverlayServer {
                 case "/panel", "/panel/" -> sendHtml(exchange, page("/overlay/panel.html"));
                 case "/panel/data" -> enviarJson(exchange, hooks.data());
                 case "/panel/save" -> enviarJson(exchange, hooks.save(leerCuerpo(exchange)));
+                case "/panel/icono" -> {
+                    byte[] png = hooks.icono(entero(queryParam(exchange.getRequestURI(), "id"), 0));
+                    if (png == null) {
+                        exchange.sendResponseHeaders(404, -1);
+                        exchange.close();
+                    } else {
+                        exchange.getResponseHeaders().set("Content-Type", "image/png");
+                        exchange.getResponseHeaders().set("Cache-Control", "max-age=300");
+                        exchange.sendResponseHeaders(200, png.length);
+                        try (OutputStream out = exchange.getResponseBody()) {
+                            out.write(png);
+                        }
+                    }
+                }
                 case "/panel/test" -> {
                     int id = entero(queryParam(exchange.getRequestURI(), "id"), 0);
                     int coins = entero(queryParam(exchange.getRequestURI(), "coins"), 1);

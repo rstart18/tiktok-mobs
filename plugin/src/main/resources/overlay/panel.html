@@ -245,6 +245,7 @@ function pintarIds(){
       id: numero,
       nombre: etiqueta || ('regalo ' + numero),
       monedas: 0, veces: 0, sinEntrar: true,
+      iconoLocal: datos.mapeos[id].iconoLocal,
     });
   });
 
@@ -270,9 +271,16 @@ function filaRegalo(regalo){
   info.className = 'regalo';
   info.innerHTML = '<div class="texto"><div class="nombre"></div><div class="meta"></div></div>';
 
-  if(regalo.imagen){
+  // La URL del CDN manda, pero solo se conoce despues de que el regalo haya entrado
+  // una vez. El png local del usuario cubre ese hueco desde el primer arranque.
+  const fuente = regalo.imagen
+    || (regalo.iconoLocal
+        ? `/panel/icono?token=${encodeURIComponent(TOKEN)}&id=${regalo.id}`
+        : '');
+
+  if(fuente){
     const icono = document.createElement('img');
-    icono.src = regalo.imagen;
+    icono.src = fuente;
     icono.alt = '';
     icono.onerror = () => icono.remove();
     info.prepend(icono);
