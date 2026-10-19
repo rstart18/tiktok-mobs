@@ -168,10 +168,10 @@ class ActionResolverTest {
         // Una donacion en el live de beto NO le sube el caos todavia.
         resolver.resolve(GiftEvent.gift("mb1", viewerB, GiftInfo.single(1, "Rose", 1)), "beto");
 
-        assertEquals(1, resolver.chaosFor("ana").level(), "ana lleva 2 donaciones -> nivel 1");
-        assertEquals(0, resolver.chaosFor("beto").level(), "beto lleva 1 donacion -> nivel 0");
+        assertEquals(1, resolver.chaos("ana").level(), "ana lleva 2 donaciones -> nivel 1");
+        assertEquals(0, resolver.chaos("beto").level(), "beto lleva 1 donacion -> nivel 0");
 
-        assertEquals(2, resolver.ledgerFor("ana").totalCoins());
-        assertEquals(1, resolver.ledgerFor("beto").totalCoins());
+        assertEquals(2, resolver.ledger("ana").totalCoins());
+        assertEquals(1, resolver.ledger("beto").totalCoins());
     }
 }

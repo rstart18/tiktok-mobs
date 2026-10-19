@@ -142,35 +142,45 @@ public final class ActionResolver {
         return gift;
     }
 
+    /** Atajo al live "main" mientras la UI siga siendo monousuario. */
+    @Deprecated
     public LikeAccumulator likes() {
-        return likesFor("main");
+        return likes("main");
     }
 
+    /** Atajo al live "main" mientras la UI siga siendo monousuario. */
+    @Deprecated
     public ChaosLevel chaos() {
-        return chaosFor("main");
+        return chaos("main");
     }
 
-    /** El nivel al que acaba de subir el caos del live "main", o 0. Para anunciarlo una sola vez. */
+    /**
+     * Atajo al live "main" mientras la UI siga siendo monousuario.
+     *
+     * @return el nivel al que acaba de subir el caos del live "main", o 0.
+     */
+    @Deprecated
     public int takeChaosLevelUp() {
         return takeChaosLevelUp("main");
     }
 
+    /** Atajo al live "main" mientras la UI siga siendo monousuario. */
+    @Deprecated
     public DonorLedger ledger() {
-        return ledgerFor("main");
+        return ledger("main");
     }
 
     // ------------------------------------------------------------------ per-streamer
 
-    /** El marcador de un live concreto. Sin este hook los tests no pueden ver dos lives a la vez. */
-    public DonorLedger ledgerFor(String streamerId) {
+    public DonorLedger ledger(String streamerId) {
         return session(streamerId).ledger();
     }
 
-    public ChaosLevel chaosFor(String streamerId) {
+    public ChaosLevel chaos(String streamerId) {
         return session(streamerId).chaos();
     }
 
-    public LikeAccumulator likesFor(String streamerId) {
+    public LikeAccumulator likes(String streamerId) {
         return session(streamerId).likes();
     }
 
@@ -180,6 +190,7 @@ public final class ActionResolver {
         Integer nivel = lastChaosLevelUp.remove(key);
         return nivel == null ? 0 : nivel;
     }
+
 
     public MappingTable table() {
         return table;
