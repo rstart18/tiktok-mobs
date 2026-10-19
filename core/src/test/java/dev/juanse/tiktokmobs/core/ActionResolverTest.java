@@ -150,4 +150,28 @@ class ActionResolverTest {
         assertTrue(resolver().resolve(
                 GiftEvent.simple("s1", EventType.SHARE, VIEWER)).isEmpty());
     }
+
+    @Test
+    void dosStreamersTienenNivelDeCaosYMetaIndependientes() {
+        // La promesa del multi-streamer: lo que haga la audiencia de un live no afecta al
+        // nivel de caos ni al top de donantes del otro. Si se mezclaran, la escalera subiria
+        // en el live equivocado y la meta de uno la pagarian los viewers del otro.
+        ActionResolver resolver = new ActionResolver(table(), new DedupPolicy(60_000L), 2);
+
+        TikTokUser viewerA = new TikTokUser("a1", "ana_v", "Ana V");
+        TikTokUser viewerB = new TikTokUser("b1", "beto_v", "Beto V");
+
+        // Dos donaciones en el live de ana suben su caos a nivel 1 (umbral 2).
+        resolver.resolve(GiftEvent.gift("ma1", viewerA, GiftInfo.single(1, "Rose", 1)), "ana");
+        resolver.resolve(GiftEvent.gift("ma2", viewerA, GiftInfo.single(1, "Rose", 1)), "ana");
+
+        // Una donacion en el live de beto NO le sube el caos todavia.
+        resolver.resolve(GiftEvent.gift("mb1", viewerB, GiftInfo.single(1, "Rose", 1)), "beto");
+
+        assertEquals(1, resolver.chaosFor("ana").level(), "ana lleva 2 donaciones -> nivel 1");
+        assertEquals(0, resolver.chaosFor("beto").level(), "beto lleva 1 donacion -> nivel 0");
+
+        assertEquals(2, resolver.ledgerFor("ana").totalCoins());
+        assertEquals(1, resolver.ledgerFor("beto").totalCoins());
+    }
 }
