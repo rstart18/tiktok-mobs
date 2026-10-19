@@ -132,7 +132,7 @@ public final class BukkitActionExecutor implements ActionExecutor {
         }
 
         Location where = SafeSpawn.findTall(at, Math.max(action.spec().radius(), 5));
-        bosses.request(definition, where, action.donorLabel(), action.coins());
+        bosses.request(definition, where, action.donorLabel(), action.coins(), action.streamerId());
         return true;
     }
 
