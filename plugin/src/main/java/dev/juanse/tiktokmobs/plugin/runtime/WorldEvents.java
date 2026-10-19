@@ -13,6 +13,7 @@ import org.bukkit.potion.PotionEffectType;
 
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Random;
 import java.util.Set;
 
@@ -35,6 +36,45 @@ public final class WorldEvents {
             "tnt_rain", "random_loot", "night", "day", "thunder", "heal", "swarm_bats",
             "rayo", "water_drop", "ruleta",
             "nether", "suelo_lava", "ruleta_rusa", "taladro");
+
+    /**
+     * Alcance de un evento de mundo:
+     *
+     * <ul>
+     *   <li>{@link #LOCAL}: solo afecta al objetivo del streamer (su jugador, su zona). Con
+     *       varios lives en el servidor se puede ejecutar sin ensuciar al resto.</li>
+     *   <li>{@link #GLOBAL}: cambia estado del mundo entero (hora, clima, bloques). Si cinco
+     *       lives lanzan "suelo_lava" a la vez, es el mismo suelo. Esta fase <b>no</b> los
+     *       filtra; declararlo aqui permite que el evento multi-streamer los desactive cuando
+     *       llegue, en lugar de descubrir el problema en vivo.</li>
+     * </ul>
+     */
+    public enum Scope {
+        LOCAL,
+        GLOBAL
+    }
+
+    private static final Map<String, Scope> SCOPES = Map.ofEntries(
+            Map.entry("tnt_rain", Scope.GLOBAL),
+            Map.entry("random_loot", Scope.LOCAL),
+            Map.entry("night", Scope.GLOBAL),
+            Map.entry("day", Scope.GLOBAL),
+            Map.entry("thunder", Scope.GLOBAL),
+            Map.entry("heal", Scope.LOCAL),
+            Map.entry("swarm_bats", Scope.LOCAL),
+            Map.entry("rayo", Scope.LOCAL),
+            Map.entry("water_drop", Scope.LOCAL),
+            Map.entry("ruleta", Scope.LOCAL),
+            Map.entry("nether", Scope.LOCAL),
+            Map.entry("suelo_lava", Scope.GLOBAL),
+            Map.entry("ruleta_rusa", Scope.LOCAL),
+            Map.entry("taladro", Scope.LOCAL));
+
+    /** Alcance declarado del evento, o LOCAL si no esta en la tabla (lo mas seguro). */
+    public static Scope scopeOf(String id) {
+        if (id == null) return Scope.LOCAL;
+        return SCOPES.getOrDefault(id.trim().toLowerCase(Locale.ROOT), Scope.LOCAL);
+    }
 
     /**
      * Los efectos con duración viven aparte, en {@link Spectacle}, porque hay que poder
