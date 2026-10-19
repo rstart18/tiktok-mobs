@@ -234,10 +234,24 @@ El token sale en la consola al arrancar:
 [panel] configurador del catalogo en http://127.0.0.1:8787/panel?token=a3f9...
 ```
 
-Una fila por regalo que haya entrado en la sesión, con su **id real**. Eliges acción (mobs,
-horda, jefe, item, evento), qué sale, las cantidades, y guardas: escribe el archivo y recarga
-el plugin solo, sin reiniciar el servidor. Cada fila tiene un botón **Probar** que inyecta esa
-donación para ver qué pasa.
+Tres pestañas:
+
+- **Por id** — los regalos vistos en la sesión y los ya mapeados por id, con su id real.
+  Cada fila trae un botón **Probar** que inyecta esa donación para ver qué pasa.
+- **Por nombre** — los mapeos por nombre del config, uno por clave (`rosa`, `rose` y `rosas`
+  salen como tres filas: agruparlas sería mentir, porque si cambias una y las otras siguen
+  apuntando a lo viejo, el regalo hace una cosa u otra según el idioma de quien done).
+  Se pueden añadir y borrar.
+- **Precios** — la escalera de tramos por monedas, la red de seguridad. Se añaden y borran
+  filas, y se guardan ordenadas de barato a caro.
+
+En todas: acción (mobs, horda, jefe, item, evento), qué sale, mínimo, por moneda, máximo y
+mensaje. Guardas y el plugin recarga solo, sin reiniciar el servidor.
+
+Los tramos del panel **sustituyen** a los del config, no se suman — si se mezclaran, cada
+guardado duplicaría la escalera entera. Y el panel se niega a guardar una escalera vacía:
+dejarla sin tramos quitaría la red de todos los regalos sin mapeo propio, que es justo el
+fallo más difícil de ver en directo.
 
 Dos decisiones del diseño que conviene conocer:
 

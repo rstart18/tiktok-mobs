@@ -81,6 +81,29 @@ public final class PanelService implements OverlayServer.PanelHooks {
         plugin.mappingByGiftId().forEach((id, spec) -> mapeos.add(String.valueOf(id), aJson(spec)));
         raiz.add("mapeos", mapeos);
 
+        // Los mapeos por nombre del config, uno por clave: "rosa", "rose" y "rosas" salen como
+        // tres filas. Agruparlas seria mentir, porque si cambias una y las otras siguen
+        // apuntando a lo viejo el regalo hace una cosa u otra segun el idioma de quien done.
+        JsonArray porNombre = new JsonArray();
+        plugin.mappingByGiftName().entrySet().stream()
+                .sorted(Map.Entry.comparingByKey())
+                .forEach(entrada -> {
+                    JsonObject fila = aJson(entrada.getValue());
+                    fila.addProperty("nombre", entrada.getKey());
+                    porNombre.add(fila);
+                });
+        raiz.add("porNombre", porNombre);
+
+        // La escalera de monedas: la red de seguridad para los regalos sin mapeo propio.
+        JsonArray tramos = new JsonArray();
+        plugin.mappingTiers().forEach(tramo -> {
+            JsonObject fila = aJson(tramo.spec());
+            fila.addProperty("maxCoins", tramo.maxCoins());
+            tramos.add(fila);
+        });
+        raiz.add("tramos", tramos);
+        raiz.addProperty("tramosDelPanel", store.tieneTramos());
+
         JsonObject opciones = new JsonObject();
         opciones.add("mobs", lista(MOBS));
         opciones.add("items", lista(ITEMS));
@@ -120,45 +143,108 @@ public final class PanelService implements OverlayServer.PanelHooks {
 
     @Override
     public String save(String json) {
-        List<Map<String, Object>> entradas = new ArrayList<>();
+        List<Map<String, Object>> porId = new ArrayList<>();
+        List<Map<String, Object>> porNombre = new ArrayList<>();
+        List<Map<String, Object>> tramos = new ArrayList<>();
         int ignoradas = 0;
 
         try {
             JsonElement parsed = JsonParser.parseString(json);
             if (!parsed.isJsonObject()) return error("El panel mandó algo que no es un objeto.");
+            JsonObject raiz = parsed.getAsJsonObject();
 
-            JsonArray filas = parsed.getAsJsonObject().getAsJsonArray("entradas");
-            if (filas == null) return error("Falta la lista de entradas.");
-
-            for (JsonElement elemento : filas) {
-                Map<String, Object> entrada = aEntrada(elemento.getAsJsonObject());
-                if (entrada == null) {
-                    ignoradas++;
-                    continue;
-                }
-                entradas.add(entrada);
-            }
+            ignoradas += recoger(raiz.getAsJsonArray("porId"), porId, this::aEntradaPorId);
+            ignoradas += recoger(raiz.getAsJsonArray("porNombre"), porNombre, this::aEntradaPorNombre);
+            ignoradas += recoger(raiz.getAsJsonArray("tramos"), tramos, this::aTramo);
         } catch (RuntimeException ex) {
             return error("No pude leer lo que mandó el panel: " + ex.getClass().getSimpleName());
         }
 
-        int escritas = store.guardarMapeos(entradas);
+        // Una escalera vacia dejaria sin red a todos los regalos sin mapeo propio, que es
+        // justo el fallo mas dificil de ver en directo: "ese regalo no hace nada".
+        if (tramos.isEmpty()) {
+            return error("No guardé nada: dejar la escalera de monedas vacía quitaría la red "
+                    + "de seguridad de todos los regalos sin mapeo.");
+        }
+
+        int ids = store.guardarMapeos(porId);
+        int nombres = store.guardarNombres(porNombre);
+        int escalera = store.guardarTramos(tramos);
 
         // La recarga toca el mundo, así que va al hilo principal. Y va DESPUÉS de responder:
         // reloadEverything levanta de nuevo este mismo servidor HTTP, y no se puede tirar el
         // servidor desde dentro de la petición que lo está usando.
         Bukkit.getScheduler().runTask(plugin, plugin::reloadEverything);
 
-        String mensaje = escritas + " regalo(s) guardados. Recargando...";
-        if (ignoradas > 0) mensaje += " (" + ignoradas + " fila(s) sin acción, ignoradas)";
+        String mensaje = ids + " por id, " + nombres + " por nombre, "
+                + escalera + " tramos. Recargando...";
+        if (ignoradas > 0) mensaje += " (" + ignoradas + " fila(s) incompletas, ignoradas)";
         return ok(mensaje);
     }
 
+    /** @return cuántas filas se descartaron por estar incompletas. */
+    private int recoger(JsonArray filas, List<Map<String, Object>> destino,
+                        java.util.function.Function<JsonObject, Map<String, Object>> conversor) {
+        if (filas == null) return 0;
+
+        int ignoradas = 0;
+        for (JsonElement elemento : filas) {
+            Map<String, Object> entrada = conversor.apply(elemento.getAsJsonObject());
+            if (entrada == null) {
+                ignoradas++;
+                continue;
+            }
+            destino.add(entrada);
+        }
+        return ignoradas;
+    }
+
+    private Map<String, Object> aEntradaPorNombre(JsonObject fila) {
+        String nombre = texto(fila, "nombre");
+        if (nombre.isBlank()) return null;
+
+        Map<String, Object> entrada = comun(fila);
+        if (entrada == null) return null;
+
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("nombre", nombre);
+        out.putAll(entrada);
+        return out;
+    }
+
+    private Map<String, Object> aTramo(JsonObject fila) {
+        int maxCoins = numero(fila, "maxCoins", 0);
+        if (maxCoins <= 0) return null;
+
+        Map<String, Object> entrada = comun(fila);
+        if (entrada == null) return null;
+
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("max-coins", maxCoins);
+        out.putAll(entrada);
+        return out;
+    }
+
     /** @return null si la fila no vale la pena guardar (sin id o sin acción). */
-    private Map<String, Object> aEntrada(JsonObject fila) {
+    private Map<String, Object> aEntradaPorId(JsonObject fila) {
         int id = fila.has("id") ? fila.get("id").getAsInt() : 0;
         if (id <= 0) return null;
 
+        Map<String, Object> comun = comun(fila);
+        if (comun == null) return null;
+
+        Map<String, Object> entrada = new LinkedHashMap<>();
+        entrada.put("id", id);
+        entrada.putAll(comun);
+        return entrada;
+    }
+
+    /**
+     * Los campos que comparten las tres tablas: acción, qué sale y las cantidades.
+     *
+     * @return null si falta la acción o el valor, que es como el panel dice "esta fila no".
+     */
+    private Map<String, Object> comun(JsonObject fila) {
         String accion = texto(fila, "action");
         ActionKind kind = ActionKind.from(accion);
         if (kind == ActionKind.NONE) return null;
@@ -167,7 +253,6 @@ public final class PanelService implements OverlayServer.PanelHooks {
         if (valor.isBlank()) return null;
 
         Map<String, Object> entrada = new LinkedHashMap<>();
-        entrada.put("id", id);
         entrada.put("action", accion);
 
         switch (kind) {

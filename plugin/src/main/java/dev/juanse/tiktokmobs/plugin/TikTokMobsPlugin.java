@@ -114,7 +114,7 @@ public final class TikTokMobsPlugin extends JavaPlugin implements Listener {
         } else {
             catalogStore.recargar();
         }
-        settings = ConfigLoader.load(getConfig(), catalogStore.giftIds(), getLogger());
+        settings = ConfigLoader.load(getConfig(), catalogStore.raiz(), getLogger());
 
         spawnRegistry = new SpawnRegistry(settings.maxLiveSpawned());
         targets = new TargetResolver(settings);
@@ -383,6 +383,14 @@ public final class TikTokMobsPlugin extends JavaPlugin implements Listener {
     /** Los mapeos por id que están activos ahora mismo. Para el panel web. */
     public java.util.Map<Integer, dev.juanse.tiktokmobs.core.action.ActionSpec> mappingByGiftId() {
         return settings.mapping().byGiftId();
+    }
+
+    public java.util.Map<String, dev.juanse.tiktokmobs.core.action.ActionSpec> mappingByGiftName() {
+        return settings.mapping().byGiftName();
+    }
+
+    public java.util.List<dev.juanse.tiktokmobs.core.config.MappingTable.Tier> mappingTiers() {
+        return settings.mapping().tiers();
     }
 
     public void resetLedger() {

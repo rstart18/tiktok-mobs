@@ -46,9 +46,19 @@ public final class CatalogStore {
                 : new YamlConfiguration();
     }
 
-    /** El bloque de mapeos del panel, o null si todavía no hay ninguno. */
+    /** Todo el archivo del panel: 'gifts', 'gift-ids' y 'tiers'. Lo lee el ConfigLoader. */
+    public ConfigurationSection raiz() {
+        return yaml;
+    }
+
+    /** El bloque de mapeos por id del panel, o null si todavía no hay ninguno. */
     public ConfigurationSection giftIds() {
         return yaml.getConfigurationSection("gift-ids");
+    }
+
+    /** true si el panel ya tiene su propia escalera de tramos (manda sobre la del config). */
+    public boolean tieneTramos() {
+        return !yaml.getMapList("tiers").isEmpty();
     }
 
     /**
@@ -106,6 +116,51 @@ public final class CatalogStore {
 
         guardar();
         return escritas;
+    }
+
+    /**
+     * Reemplaza el bloque de mapeos por nombre.
+     *
+     * <p>Las claves van tal cual las manda el panel: el buscador las pasa a minúsculas al
+     * resolver, así que "Rosa" y "rosa" acaban siendo lo mismo.
+     */
+    public int guardarNombres(List<Map<String, Object>> entradas) {
+        yaml.set("gifts", null);
+
+        int escritas = 0;
+        for (Map<String, Object> entrada : entradas) {
+            Object nombre = entrada.get("nombre");
+            if (!(nombre instanceof String texto) || texto.isBlank()) continue;
+
+            String ruta = "gifts." + texto.trim();
+            for (Map.Entry<String, Object> campo : entrada.entrySet()) {
+                if (campo.getKey().equals("nombre")) continue;
+                if (campo.getValue() == null) continue;
+                if (campo.getValue() instanceof String valor && valor.isBlank()) continue;
+                yaml.set(ruta + "." + campo.getKey(), campo.getValue());
+            }
+            escritas++;
+        }
+
+        guardar();
+        return escritas;
+    }
+
+    /**
+     * Reemplaza la escalera de tramos entera.
+     *
+     * <p>Se guardan ordenados por 'max-coins'. El orden en el archivo da igual —la tabla los
+     * ordena al construirse— pero un archivo que se lee de barato a caro es un archivo que se
+     * puede revisar a ojo cuando algo sale raro en directo.
+     */
+    public int guardarTramos(List<Map<String, Object>> tramos) {
+        List<Map<String, Object>> ordenados = new java.util.ArrayList<>(tramos);
+        ordenados.sort(java.util.Comparator.comparingInt(
+                t -> t.get("max-coins") instanceof Number n ? n.intValue() : Integer.MAX_VALUE));
+
+        yaml.set("tiers", ordenados);
+        guardar();
+        return ordenados.size();
     }
 
     /** Relee el archivo de disco. Se llama en cada reload. */

@@ -143,6 +143,17 @@ public final class MappingTable {
         return byGiftId;
     }
 
+    /**
+     * Los mapeos por nombre, con las claves en minúsculas (así es como se buscan).
+     *
+     * <p>El panel los enseña uno por uno, alias incluidos: "rosa", "rose" y "rosas" son tres
+     * entradas distintas. Agruparlas sería mentir — si cambias una y las otras siguen apuntando
+     * a lo viejo, el regalo hace una cosa u otra según el idioma de quien done.
+     */
+    public Map<String, ActionSpec> byGiftName() {
+        return byGiftName;
+    }
+
     public static final class Builder {
         private final Map<Integer, ActionSpec> byGiftId = new HashMap<>();
         private final Map<String, ActionSpec> byGiftName = new HashMap<>();
@@ -178,6 +189,21 @@ public final class MappingTable {
         public Builder tier(int maxCoins, ActionSpec spec) {
             if (spec != null) tiers.add(new Tier(Math.max(0, maxCoins), spec));
             return this;
+        }
+
+        /**
+         * Borra los tramos cargados hasta ahora.
+         *
+         * <p>Hace falta porque los tramos del panel <b>sustituyen</b> a los del config en vez de
+         * sumarse: si se mezclaran, cada guardado desde la web duplicaría la escalera entera.
+         */
+        public Builder clearTiers() {
+            tiers.clear();
+            return this;
+        }
+
+        public boolean hasTiers() {
+            return !tiers.isEmpty();
         }
 
         public Builder on(EventType type, ActionSpec spec) {

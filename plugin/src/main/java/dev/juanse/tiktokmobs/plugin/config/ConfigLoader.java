@@ -24,16 +24,17 @@ public final class ConfigLoader {
     }
 
     /**
-     * @param panelGiftIds el bloque 'gift-ids' que escribió el panel web, o null.
-     *                     Se aplica DESPUÉS del config, así que manda sobre él.
+     * @param panel el catalogo.yml que escribió el panel web, o null. Se aplica DESPUÉS del
+     *              config: sus 'gifts' y 'gift-ids' mandan sobre los del config, y si trae
+     *              'tiers' esos SUSTITUYEN a la escalera del config entera.
      */
-    public static PluginSettings load(FileConfiguration cfg, ConfigurationSection panelGiftIds,
+    public static PluginSettings load(FileConfiguration cfg, ConfigurationSection panel,
                                       Logger log) {
-        PANEL_GIFT_IDS.set(panelGiftIds);
+        PANEL.set(panel);
         try {
             return construir(cfg, log);
         } finally {
-            PANEL_GIFT_IDS.remove();
+            PANEL.remove();
         }
     }
 
@@ -41,7 +42,7 @@ public final class ConfigLoader {
      * Se pasa por un ThreadLocal y no por parámetro para no arrastrar el bloque del panel por
      * toda la cadena de métodos privados, que ya tiene bastantes argumentos.
      */
-    private static final ThreadLocal<ConfigurationSection> PANEL_GIFT_IDS = new ThreadLocal<>();
+    private static final ThreadLocal<ConfigurationSection> PANEL = new ThreadLocal<>();
 
     private static PluginSettings construir(FileConfiguration cfg, Logger log) {
         PluginSettings.SourceType sourceType = enumOf(
@@ -193,16 +194,41 @@ public final class ConfigLoader {
         }
 
         // El panel va DESPUÉS a propósito: lo que se toca desde la web manda sobre el config.
-        ConfigurationSection panel = PANEL_GIFT_IDS.get();
+        ConfigurationSection panel = PANEL.get();
         if (panel != null) {
-            leerGiftIds(panel, builder, log, "panel");
+            ConfigurationSection panelNombres = panel.getConfigurationSection("gifts");
+            if (panelNombres != null) {
+                for (String giftName : panelNombres.getKeys(false)) {
+                    ActionSpec spec = spec(panelNombres.getConfigurationSection(giftName), log,
+                            "panel.gifts." + giftName);
+                    if (spec != null) builder.gift(giftName, spec);
+                }
+            }
+
+            ConfigurationSection panelIds = panel.getConfigurationSection("gift-ids");
+            if (panelIds != null) {
+                leerGiftIds(panelIds, builder, log, "panel");
+            }
         }
 
-        List<Map<?, ?>> tiers = cfg.getMapList("tiers");
+        // Los tramos del panel SUSTITUYEN a los del config, no se suman: si se mezclaran,
+        // cada guardado desde la web duplicaria la escalera entera.
+        ConfigurationSection panelRoot = PANEL.get();
+        List<Map<?, ?>> tiersDelPanel = panelRoot == null
+                ? List.of() : panelRoot.getMapList("tiers");
+        boolean mandaElPanel = !tiersDelPanel.isEmpty();
+
+        List<Map<?, ?>> tiers = mandaElPanel ? tiersDelPanel : cfg.getMapList("tiers");
+        String origenTramos = mandaElPanel ? "panel" : "config";
+
         for (Map<?, ?> raw : tiers) {
             int maxCoins = intFrom(raw.get("max-coins"), Integer.MAX_VALUE);
-            ActionSpec spec = specFromMap(raw, log, "tiers[max-coins=" + maxCoins + "]");
+            ActionSpec spec = specFromMap(raw, log,
+                    origenTramos + ".tiers[max-coins=" + maxCoins + "]");
             if (spec != null) builder.tier(maxCoins, spec);
+        }
+        if (mandaElPanel) {
+            log.info("[panel] " + tiers.size() + " tramo(s) sustituyen a los del config");
         }
 
         ActionSpec likeSpec = spec(cfg.getConfigurationSection("likes"), log, "likes");

@@ -91,6 +91,19 @@
   .pie .estado.ok{color:var(--verde);}
   .pie .estado.mal{color:var(--rojo);}
 
+  .pestanas{display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap;}
+  .pestanas button{padding:9px 16px;font-size:14px;}
+  .pestanas button[aria-selected=true]{
+    background:var(--azul);border-color:var(--azul);color:#061423;font-weight:600;
+  }
+  section[hidden]{display:none;}
+  .acciones-tabla{margin-top:10px;display:flex;gap:8px;}
+
+  /* La tabla por nombre lleva el nombre editable; la de tramos, el tope de monedas. */
+  .fila.nombre{grid-template-columns:150px 120px 1.4fr 70px 80px 80px 1fr 110px;}
+  .borrar{color:var(--rojo);border-color:transparent;}
+  .borrar:hover{border-color:var(--rojo);}
+
   .vacio{padding:40px 20px;text-align:center;color:var(--suave);}
   .vacio code{
     background:var(--fondo);padding:2px 6px;border-radius:4px;
@@ -112,13 +125,40 @@
     <p>Qué hace cada regalo de tu live. Se guarda y recarga sin reiniciar el servidor.</p>
   </header>
 
-  <div class="aviso">
-    Aquí solo salen los regalos que <b>ya han entrado al menos una vez</b> en esta sesión: el
-    plugin aprende su id cuando alguien los manda. Si falta uno, pide que lo donen (o usa
-    <b>/ttmobs test</b>) y recarga esta página.
+  <div class="pestanas" role="tablist">
+    <button role="tab" aria-selected="true" data-seccion="ids">Por id</button>
+    <button role="tab" aria-selected="false" data-seccion="nombres">Por nombre</button>
+    <button role="tab" aria-selected="false" data-seccion="tramos">Precios</button>
   </div>
 
-  <div class="tabla" id="tabla"></div>
+  <section id="sec-ids">
+    <div class="aviso">
+      Lo fiable. Aquí salen los regalos que <b>ya han entrado al menos una vez</b> —el plugin
+      aprende su id cuando alguien los manda— y los que ya tengas mapeados por id.
+      El id es el mismo en todos los idiomas.
+    </div>
+    <div class="tabla" id="tabla-ids"></div>
+  </section>
+
+  <section id="sec-nombres" hidden>
+    <div class="aviso">
+      TikTok <b>traduce el nombre</b> al idioma de quien dona, así que esto falla en cuanto te
+      donan desde otro idioma. Está aquí porque es lo que hay hasta conocer el id, pero cuando
+      tengas el id, mueve el regalo a la pestaña de al lado y borra la fila de aquí.
+    </div>
+    <div class="tabla" id="tabla-nombres"></div>
+    <div class="acciones-tabla"><button id="add-nombre">+ Añadir nombre</button></div>
+  </section>
+
+  <section id="sec-tramos" hidden>
+    <div class="aviso">
+      <b>La red de seguridad.</b> Cualquier regalo sin mapeo propio cae aquí según lo que valga,
+      en cualquier idioma y con regalos que TikTok saque mañana. Cada fila es
+      <b>&ldquo;hasta N monedas&rdquo;</b>. Si solo configuras una cosa, que sea esta.
+    </div>
+    <div class="tabla" id="tabla-tramos"></div>
+    <div class="acciones-tabla"><button id="add-tramo">+ Añadir tramo</button></div>
+  </section>
 </div>
 
 <div class="pie">
@@ -174,22 +214,144 @@ async function cargar(){
 }
 
 function pintar(){
-  const tabla = $('tabla');
+  pintarIds();
+  pintarNombres();
+  pintarTramos();
+}
+
+/* ---------------------------------------------------------------- por id */
+function pintarIds(){
+  const tabla = $('tabla-ids');
   tabla.innerHTML = '';
 
-  if(!datos.regalos.length){
+  // Union de lo visto en la sesion y lo ya mapeado: un regalo mapeado que todavia no ha
+  // entrado hoy tiene que poder editarse igual, o desaparece del panel al reiniciar.
+  const porId = new Map();
+  (datos.regalos || []).forEach(r => porId.set(r.id, {...r}));
+  Object.keys(datos.mapeos || {}).forEach(id => {
+    const numero = Number(id);
+    if(!porId.has(numero)) porId.set(numero, {id:numero, nombre:'(mapeado, sin entrar hoy)', monedas:0, veces:0});
+  });
+
+  if(!porId.size){
     tabla.innerHTML = `<div class="vacio">
-      Todavía no ha entrado ningún regalo en esta sesión.<br>
+      Todavía no ha entrado ningún regalo.<br>
       Prueba con <code>/ttmobs test Rosa 1</code> y recarga.
     </div>`;
     return;
   }
 
   tabla.appendChild(fila(['Regalo','Acción','Qué sale','Mín.','Por moneda','Máx.','Mensaje',''], true));
+  [...porId.values()]
+    .sort((a,b) => a.monedas - b.monedas || a.id - b.id)
+    .forEach(regalo => tabla.appendChild(filaRegalo(regalo)));
+}
 
-  // De más barato a más caro: el mismo orden que la bandeja de TikTok.
-  const ordenados = [...datos.regalos].sort((a,b) => a.monedas - b.monedas || a.id - b.id);
-  ordenados.forEach(regalo => tabla.appendChild(filaRegalo(regalo)));
+function filaRegalo(regalo){
+  const actual = datos.mapeos[regalo.id] || {};
+  const div = base('fila', regalo.id);
+
+  const info = document.createElement('div');
+  info.className = 'regalo';
+  info.innerHTML = '<div class="nombre"></div><div class="meta"></div>';
+  info.querySelector('.nombre').textContent = regalo.nombre || ('id ' + regalo.id);
+  info.querySelector('.meta').textContent =
+    `id ${regalo.id} · ${regalo.monedas} monedas · x${regalo.veces}`;
+  div.appendChild(info);
+
+  camposComunes(div, actual);
+
+  const probar = document.createElement('button');
+  probar.textContent = 'Probar';
+  probar.onclick = () => test(regalo.id, regalo.monedas);
+  div.appendChild(envolver(probar));
+  return div;
+}
+
+/* ------------------------------------------------------------ por nombre */
+function pintarNombres(){
+  const tabla = $('tabla-nombres');
+  tabla.innerHTML = '';
+  tabla.appendChild(fila(['Nombre del regalo','Acción','Qué sale','Mín.','Por moneda','Máx.','Mensaje',''], true));
+  (datos.porNombre || []).forEach(entrada => tabla.appendChild(filaNombre(entrada)));
+}
+
+function filaNombre(entrada){
+  const div = base('fila nombre');
+
+  const nombre = document.createElement('input');
+  nombre.className = 'nombre-input';
+  nombre.placeholder = 'Rosa';
+  nombre.value = entrada?.nombre || '';
+  div.appendChild(envolver(nombre));
+
+  camposComunes(div, entrada || {});
+  div.appendChild(envolver(botonBorrar(div)));
+  return div;
+}
+
+/* ---------------------------------------------------------------- tramos */
+function pintarTramos(){
+  const tabla = $('tabla-tramos');
+  tabla.innerHTML = '';
+  tabla.appendChild(fila(['Hasta N monedas','Acción','Qué sale','Mín.','Por moneda','Máx.','Mensaje',''], true));
+  (datos.tramos || []).forEach(t => tabla.appendChild(filaTramo(t)));
+}
+
+function filaTramo(entrada){
+  const div = base('fila tramo');
+
+  const tope = numero(entrada?.maxCoins ?? 100, 1, 'maxCoins');
+  div.appendChild(envolver(tope));
+
+  camposComunes(div, entrada || {});
+  div.appendChild(envolver(botonBorrar(div)));
+  return div;
+}
+
+/* ------------------------------------------------------------ compartido */
+function base(clase, id){
+  const div = document.createElement('div');
+  div.className = clase;
+  if(id !== undefined) div.dataset.id = id;
+  return div;
+}
+
+/* Las seis celdas que comparten las tres tablas. */
+function camposComunes(div, actual){
+  const accion = selector(ACCIONES, actual.action || '');
+  accion.className = 'accion';
+  div.appendChild(envolver(accion));
+
+  const valor = selector([], actual.valor || '');
+  valor.className = 'valor';
+  div.appendChild(envolver(valor));
+
+  div.appendChild(envolver(numero(actual.count || 1, 1, 'min')));
+  div.appendChild(envolver(numero(actual.perCoin || 0, 0, 'perCoin', 0.01)));
+  div.appendChild(envolver(numero(actual.maxCount || 0, 0, 'max')));
+
+  const mensaje = document.createElement('input');
+  mensaje.className = 'mensaje-input';
+  mensaje.placeholder = 'Mensaje en el chat (opcional)';
+  mensaje.value = actual.message || '';
+  const celda = envolver(mensaje);
+  celda.className = 'mensaje';
+  div.appendChild(celda);
+
+  // La lista de "que sale" depende de la accion, asi que se repuebla al cambiarla.
+  const refrescar = () => rellenar(valor, opcionesDe(accion.value), valor.value);
+  accion.onchange = refrescar;
+  refrescar();
+  valor.value = actual.valor || valor.value;
+}
+
+function botonBorrar(fila){
+  const boton = document.createElement('button');
+  boton.className = 'borrar';
+  boton.textContent = 'Borrar';
+  boton.onclick = () => fila.remove();
+  return boton;
 }
 
 function fila(celdas, cabecera){
@@ -200,57 +362,6 @@ function fila(celdas, cabecera){
     celda.textContent = texto;
     div.appendChild(celda);
   });
-  return div;
-}
-
-function filaRegalo(regalo){
-  const actual = datos.mapeos[regalo.id] || {};
-  const div = document.createElement('div');
-  div.className = 'fila';
-  div.dataset.id = regalo.id;
-
-  const info = document.createElement('div');
-  info.className = 'regalo';
-  info.innerHTML = `<div class="nombre"></div><div class="meta"></div>`;
-  info.querySelector('.nombre').textContent = regalo.nombre || ('id ' + regalo.id);
-  info.querySelector('.meta').textContent = `id ${regalo.id} · ${regalo.monedas} monedas · x${regalo.veces}`;
-  div.appendChild(info);
-
-  const accion = selector(ACCIONES.map(a => ({valor:a.valor, texto:a.texto})), actual.action || '');
-  accion.className = 'accion';
-  div.appendChild(envolver(accion));
-
-  const valor = selector([], actual.valor || '');
-  valor.className = 'valor';
-  div.appendChild(envolver(valor));
-
-  const count = numero(actual.count || 1, 1, 'min');
-  const perCoin = numero(actual.perCoin || 0, 0, 'perCoin', 0.01);
-  const maxCount = numero(actual.maxCount || 0, 0, 'max');
-  [count, perCoin, maxCount].forEach(i => div.appendChild(envolver(i)));
-
-  const mensaje = document.createElement('input');
-  mensaje.className = 'mensaje-input';
-  mensaje.placeholder = 'Mensaje en el chat (opcional)';
-  mensaje.value = actual.message || '';
-  const celdaMensaje = envolver(mensaje);
-  celdaMensaje.className = 'mensaje';
-  div.appendChild(celdaMensaje);
-
-  const probar = document.createElement('button');
-  probar.textContent = 'Probar';
-  probar.onclick = () => test(regalo.id, regalo.monedas);
-  div.appendChild(envolver(probar));
-
-  // La lista de "qué sale" depende de la acción, así que se repuebla al cambiarla.
-  const refrescar = () => {
-    const previo = valor.value;
-    rellenar(valor, opcionesDe(accion.value), previo);
-  };
-  accion.onchange = refrescar;
-  refrescar();
-  valor.value = actual.valor || valor.value;
-
   return div;
 }
 
@@ -269,9 +380,7 @@ function selector(opciones, seleccionado){
 function rellenar(select, opciones, seleccionado){
   select.innerHTML = '';
   const normalizadas = opciones.map(o => typeof o === 'string' ? {valor:o, texto:o} : o);
-  if(!normalizadas.some(o => o.valor === '')){
-    normalizadas.unshift({valor:'', texto:'—'});
-  }
+  if(!normalizadas.some(o => o.valor === '')) normalizadas.unshift({valor:'', texto:'—'});
   normalizadas.forEach(o => {
     const option = document.createElement('option');
     option.value = o.valor;
@@ -291,6 +400,17 @@ function numero(valor, min, clase, paso){
   return input;
 }
 
+function leerComunes(fila){
+  return {
+    action: fila.querySelector('.accion').value,
+    valor: fila.querySelector('.valor').value,
+    count: Number(fila.querySelector('.min').value) || 1,
+    perCoin: Number(fila.querySelector('.perCoin').value) || 0,
+    maxCount: Number(fila.querySelector('.max').value) || 0,
+    message: fila.querySelector('.mensaje-input').value,
+  };
+}
+
 async function test(id, monedas){
   estado('Probando...');
   try{
@@ -304,35 +424,47 @@ async function test(id, monedas){
 }
 
 async function guardar(){
-  const entradas = [...document.querySelectorAll('.fila:not(.cabecera)')].map(fila => ({
-    id: Number(fila.dataset.id),
-    action: fila.querySelector('.accion').value,
-    valor: fila.querySelector('.valor').value,
-    count: Number(fila.querySelector('.min').value) || 1,
-    perCoin: Number(fila.querySelector('.perCoin').value) || 0,
-    maxCount: Number(fila.querySelector('.max').value) || 0,
-    message: fila.querySelector('.mensaje-input').value,
-    monedas: Number(fila.querySelector('.regalo .meta').textContent.match(/· (\d+) monedas/)?.[1] || 0),
-  }));
+  const cuerpo = {
+    porId: [...document.querySelectorAll('#tabla-ids .fila:not(.cabecera)')].map(f => ({
+      id: Number(f.dataset.id), ...leerComunes(f),
+    })),
+    porNombre: [...document.querySelectorAll('#tabla-nombres .fila:not(.cabecera)')].map(f => ({
+      nombre: f.querySelector('.nombre-input').value, ...leerComunes(f),
+    })),
+    tramos: [...document.querySelectorAll('#tabla-tramos .fila:not(.cabecera)')].map(f => ({
+      maxCoins: Number(f.querySelector('.maxCoins').value) || 0, ...leerComunes(f),
+    })),
+  };
 
   estado('Guardando...');
   try{
     const resp = await fetch('/panel/save?token=' + encodeURIComponent(TOKEN), {
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({entradas}),
+      body: JSON.stringify(cuerpo),
     });
-    const cuerpo = await resp.json();
-    estado(cuerpo.mensaje, cuerpo.ok ? 'ok' : 'mal');
+    const respuesta = await resp.json();
+    estado(respuesta.mensaje, respuesta.ok ? 'ok' : 'mal');
 
-    // La recarga del plugin levanta de nuevo el servidor HTTP: se espera un momento
-    // antes de volver a pedir los datos, o la peticion cae en el hueco.
-    if(cuerpo.ok) setTimeout(cargar, 1500);
+    // La recarga del plugin levanta de nuevo este mismo servidor HTTP: se espera un
+    // momento antes de volver a pedir los datos, o la peticion cae en el hueco.
+    if(respuesta.ok) setTimeout(cargar, 1500);
   }catch(e){
     estado('No pude guardar: ' + e.message, 'mal');
   }
 }
 
+document.querySelectorAll('.pestanas button').forEach(boton => {
+  boton.onclick = () => {
+    document.querySelectorAll('.pestanas button').forEach(b =>
+      b.setAttribute('aria-selected', String(b === boton)));
+    ['ids','nombres','tramos'].forEach(id =>
+      $('sec-' + id).hidden = id !== boton.dataset.seccion);
+  };
+});
+
+$('add-nombre').onclick = () => $('tabla-nombres').appendChild(filaNombre(null));
+$('add-tramo').onclick = () => $('tabla-tramos').appendChild(filaTramo(null));
 $('guardar').onclick = guardar;
 $('recargar').onclick = cargar;
 cargar();
