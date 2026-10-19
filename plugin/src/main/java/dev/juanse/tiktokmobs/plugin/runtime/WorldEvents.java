@@ -13,6 +13,7 @@ import org.bukkit.potion.PotionEffectType;
 
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Random;
 import java.util.Set;
 
@@ -35,6 +36,45 @@ public final class WorldEvents {
             "tnt_rain", "random_loot", "night", "day", "thunder", "heal", "swarm_bats",
             "rayo", "water_drop", "ruleta",
             "nether", "suelo_lava", "ruleta_rusa", "taladro");
+
+    /**
+     * Alcance de un evento de mundo:
+     *
+     * <ul>
+     *   <li>{@link #LOCAL}: solo afecta al objetivo del streamer (su jugador, su zona). Con
+     *       varios lives en el servidor se puede ejecutar sin ensuciar al resto.</li>
+     *   <li>{@link #GLOBAL}: cambia estado del mundo entero (hora, clima, bloques). Si cinco
+     *       lives lanzan "suelo_lava" a la vez, es el mismo suelo. Esta fase <b>no</b> los
+     *       filtra; declararlo aqui permite que el evento multi-streamer los desactive cuando
+     *       llegue, en lugar de descubrir el problema en vivo.</li>
+     * </ul>
+     */
+    public enum Scope {
+        LOCAL,
+        GLOBAL
+    }
+
+    private static final Map<String, Scope> SCOPES = Map.ofEntries(
+            Map.entry("tnt_rain", Scope.GLOBAL),
+            Map.entry("random_loot", Scope.LOCAL),
+            Map.entry("night", Scope.GLOBAL),
+            Map.entry("day", Scope.GLOBAL),
+            Map.entry("thunder", Scope.GLOBAL),
+            Map.entry("heal", Scope.LOCAL),
+            Map.entry("swarm_bats", Scope.LOCAL),
+            Map.entry("rayo", Scope.LOCAL),
+            Map.entry("water_drop", Scope.LOCAL),
+            Map.entry("ruleta", Scope.LOCAL),
+            Map.entry("nether", Scope.LOCAL),
+            Map.entry("suelo_lava", Scope.GLOBAL),
+            Map.entry("ruleta_rusa", Scope.LOCAL),
+            Map.entry("taladro", Scope.LOCAL));
+
+    /** Alcance declarado del evento, o LOCAL si no esta en la tabla (lo mas seguro). */
+    public static Scope scopeOf(String id) {
+        if (id == null) return Scope.LOCAL;
+        return SCOPES.getOrDefault(id.trim().toLowerCase(Locale.ROOT), Scope.LOCAL);
+    }
 
     /**
      * Los efectos con duración viven aparte, en {@link Spectacle}, porque hay que poder
@@ -71,7 +111,8 @@ public final class WorldEvents {
     }
 
     /** @return true si el id existía y se ejecutó. */
-    public static boolean run(String id, Location at, SpawnRegistry registry, Player nearest) {
+    public static boolean run(String id, Location at, SpawnRegistry registry, Player nearest,
+                              String streamerId) {
         if (at == null || at.getWorld() == null) return false;
         World world = at.getWorld();
 
@@ -81,7 +122,7 @@ public final class WorldEvents {
                     Location drop = at.clone().add(offset(6), 12, offset(6));
                     TNTPrimed tnt = world.spawn(drop, TNTPrimed.class);
                     tnt.setFuseTicks(60 + RANDOM.nextInt(40));
-                    registry.track(tnt);
+                    registry.track(streamerId, tnt);
                 }
             }
             case "random_loot" -> {
@@ -119,7 +160,7 @@ public final class WorldEvents {
             case "water_drop" -> {
                 if (nearest != null) dropFromSky(nearest);
             }
-            case "ruleta" -> ruleta(at, registry, nearest);
+            case "ruleta" -> ruleta(at, registry, nearest, streamerId);
 
             case "nether" -> {
                 if (nearest != null && spectacle != null) spectacle.nether(nearest, 60);
@@ -141,7 +182,7 @@ public final class WorldEvents {
                 for (int i = 0; i < 20; i++) {
                     Entity bat = world.spawnEntity(at.clone().add(offset(5), 2, offset(5)),
                             org.bukkit.entity.EntityType.BAT);
-                    registry.track(bat);
+                    registry.track(streamerId, bat);
                 }
             }
             default -> {
@@ -157,7 +198,7 @@ public final class WorldEvents {
      * <p>Lo que la hace funcionar no es el premio, es el <b>anuncio</b>: se dice en grande qué
      * salió. Sin eso es un evento aleatorio cualquiera y el que donó no sabe qué compró.
      */
-    private static void ruleta(Location at, SpawnRegistry registry, Player nearest) {
+    private static void ruleta(Location at, SpawnRegistry registry, Player nearest, String streamerId) {
         Premio premio = RULETA.get(RANDOM.nextInt(RULETA.size()));
         World world = at.getWorld();
 
@@ -165,7 +206,7 @@ public final class WorldEvents {
             case "TOTEM" -> dar(nearest, Material.TOTEM_OF_UNDYING, 1);
             case "MANZANA DORADA" -> dar(nearest, Material.GOLDEN_APPLE, 1);
             case "DIAMANTES" -> dar(nearest, Material.DIAMOND, 3);
-            case "VIDA COMPLETA" -> run("heal", at, registry, nearest);
+            case "VIDA COMPLETA" -> run("heal", at, registry, nearest, streamerId);
             case "VELOCIDAD" -> {
                 if (nearest != null) {
                     PotionEffectType speed = PotionEffectType.getByName("SPEED");
@@ -174,8 +215,8 @@ public final class WorldEvents {
                     }
                 }
             }
-            case "LOOT" -> run("random_loot", at, registry, nearest);
-            case "RAYO" -> run("rayo", at, registry, nearest);
+            case "LOOT" -> run("random_loot", at, registry, nearest, streamerId);
+            case "RAYO" -> run("rayo", at, registry, nearest, streamerId);
             case "CEGUERA" -> {
                 if (nearest != null) {
                     PotionEffectType blind = PotionEffectType.getByName("BLINDNESS");
@@ -187,13 +228,13 @@ public final class WorldEvents {
             case "FUEGO" -> {
                 if (nearest != null) nearest.setFireTicks(20 * 5);
             }
-            case "MURCIELAGOS" -> run("swarm_bats", at, registry, nearest);
-            case "NOCHE" -> run("night", at, registry, nearest);
+            case "MURCIELAGOS" -> run("swarm_bats", at, registry, nearest, streamerId);
+            case "NOCHE" -> run("night", at, registry, nearest, streamerId);
             case "CREEPER" -> {
                 Entity creeper = world.spawnEntity(
                         at.clone().add(offset(3), 0, offset(3)),
                         org.bukkit.entity.EntityType.CREEPER);
-                registry.track(creeper);
+                registry.track(streamerId, creeper);
             }
             default -> {
                 // Un premio en la lista sin case aquí: mejor no hacer nada que romper el tick.

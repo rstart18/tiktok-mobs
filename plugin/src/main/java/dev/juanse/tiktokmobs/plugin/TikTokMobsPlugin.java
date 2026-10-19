@@ -366,8 +366,9 @@ public final class TikTokMobsPlugin extends JavaPlugin implements Listener {
         if (at == null || at.getWorld() == null) return "sin objetivo: no hay jugador conectado";
 
         String donor = dev.juanse.tiktokmobs.core.util.NameSanitizer.clean(donante);
+        // El comando /ttmobs testboss es siempre monousuario: el jefe cae en el live "main".
         BossManager.Outcome outcome = bossManager.request(
-                definition, SafeSpawn.findTall(at, 5), donor, Math.max(0, monedas));
+                definition, SafeSpawn.findTall(at, 5), donor, Math.max(0, monedas), "main");
 
         return switch (outcome) {
             case SUMMONING -> "invocando '" + id + "' para " + donor + " (" + monedas + " monedas)";

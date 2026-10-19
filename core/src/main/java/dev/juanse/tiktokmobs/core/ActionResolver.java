@@ -11,8 +11,13 @@ import dev.juanse.tiktokmobs.core.event.GiftInfo;
 import dev.juanse.tiktokmobs.core.util.NameSanitizer;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * El cerebro: evento crudo → lista de acciones a ejecutar. Sin Bukkit, sin red, sin estado
@@ -26,12 +31,17 @@ public final class ActionResolver {
 
     private final MappingTable table;
     private final DedupPolicy dedup;
-    private final LikeAccumulator likes;
-    private final DonorLedger ledger;
-    private final ChaosLevel chaos;
+    private final int donacionesPorNivelDeCaos;
+    /**
+     * Una sesion por live. Se crea bajo demanda la primera vez que llega un evento con un
+     * streamerId nuevo: asi un servidor con un solo stream solo tiene la entrada "main" y
+     * se comporta exactamente igual que antes del cambio.
+     */
+    private final Map<String, StreamerSession> sessions = new ConcurrentHashMap<>();
     private final GiftRegistry gifts = new GiftRegistry();
     private volatile GiftInfo lastUnseen;
-    private volatile int lastChaosLevelUp;
+    /** Nivel al que acaba de subir el caos, por streamer. Se consume con takeChaosLevelUp. */
+    private final Map<String, Integer> lastChaosLevelUp = new ConcurrentHashMap<>();
 
     public ActionResolver(MappingTable table, DedupPolicy dedup) {
         this(table, dedup, 20);
@@ -41,9 +51,13 @@ public final class ActionResolver {
     public ActionResolver(MappingTable table, DedupPolicy dedup, int donacionesPorNivelDeCaos) {
         this.table = table == null ? MappingTable.empty() : table;
         this.dedup = dedup == null ? new DedupPolicy(60_000L) : dedup;
-        this.likes = new LikeAccumulator(this.table.likeEvery());
-        this.ledger = new DonorLedger(this.table.donationGoalCoins());
-        this.chaos = new ChaosLevel(donacionesPorNivelDeCaos);
+        this.donacionesPorNivelDeCaos = donacionesPorNivelDeCaos;
+    }
+
+    private StreamerSession session(String streamerId) {
+        String key = streamerId == null || streamerId.isBlank() ? "main" : streamerId;
+        return sessions.computeIfAbsent(key, id -> new StreamerSession(
+                id, table.donationGoalCoins(), donacionesPorNivelDeCaos, table.likeEvery()));
     }
 
     public List<ResolvedAction> resolve(GiftEvent event) {
@@ -59,10 +73,11 @@ public final class ActionResolver {
         if (event == null || !dedup.accept(event, streamerId)) return List.of();
 
         String donor = NameSanitizer.clean(event.user().rawLabel());
+        StreamerSession session = session(streamerId);
 
         List<ResolvedAction> actions = switch (event.type()) {
             case GIFT -> giftActions(event, donor, streamerId);
-            case LIKE -> likeActions(event, donor, streamerId);
+            case LIKE -> likeActions(event, donor, streamerId, session);
             default -> simpleActions(event, donor, streamerId);
         };
 
@@ -70,10 +85,10 @@ public final class ActionResolver {
 
         // Cada donación empuja el nivel de caos. Se apunta aquí, en el único sitio por el que
         // pasan todas, y no en el executor: una donación con cinco acciones sigue siendo una.
-        int subioA = chaos.record();
-        if (subioA > 0) lastChaosLevelUp = subioA;
+        int subioA = session.chaos().record();
+        if (subioA > 0) lastChaosLevelUp.put(session.streamerId(), subioA);
 
-        int goalsReached = ledger.record(donor, event.coins());
+        int goalsReached = session.ledger().record(donor, event.coins());
         if (goalsReached <= 0 || !table.goalEnabled()) return actions;
 
         List<ResolvedAction> withGoal = new ArrayList<>(actions);
@@ -97,8 +112,9 @@ public final class ActionResolver {
                 .orElse(List.of());
     }
 
-    private List<ResolvedAction> likeActions(GiftEvent event, String donor, String streamerId) {
-        int crossed = likes.add(event.likeCount());
+    private List<ResolvedAction> likeActions(GiftEvent event, String donor, String streamerId,
+                                             StreamerSession session) {
+        int crossed = session.likes().add(event.likeCount());
         if (crossed <= 0) return List.of();
 
         Optional<ActionSpec> spec = table.forEventType(EventType.LIKE);
@@ -129,23 +145,61 @@ public final class ActionResolver {
         return gift;
     }
 
+    /** Atajo al live "main" mientras la UI siga siendo monousuario. */
+    @Deprecated
     public LikeAccumulator likes() {
-        return likes;
+        return likes("main");
     }
 
+    /** Atajo al live "main" mientras la UI siga siendo monousuario. */
+    @Deprecated
     public ChaosLevel chaos() {
-        return chaos;
+        return chaos("main");
     }
 
-    /** El nivel al que acaba de subir el caos, o 0. Para anunciarlo una sola vez. */
+    /**
+     * Atajo al live "main" mientras la UI siga siendo monousuario.
+     *
+     * @return el nivel al que acaba de subir el caos del live "main", o 0.
+     */
+    @Deprecated
     public int takeChaosLevelUp() {
-        int nivel = lastChaosLevelUp;
-        lastChaosLevelUp = 0;
-        return nivel;
+        return takeChaosLevelUp("main");
     }
 
+    /** Atajo al live "main" mientras la UI siga siendo monousuario. */
+    @Deprecated
     public DonorLedger ledger() {
-        return ledger;
+        return ledger("main");
+    }
+
+    // ------------------------------------------------------------------ per-streamer
+
+    public DonorLedger ledger(String streamerId) {
+        return session(streamerId).ledger();
+    }
+
+    public ChaosLevel chaos(String streamerId) {
+        return session(streamerId).chaos();
+    }
+
+    public LikeAccumulator likes(String streamerId) {
+        return session(streamerId).likes();
+    }
+
+    /** El nivel al que acaba de subir el caos de ese live, o 0. Para anunciarlo una sola vez. */
+    public int takeChaosLevelUp(String streamerId) {
+        String key = streamerId == null || streamerId.isBlank() ? "main" : streamerId;
+        Integer nivel = lastChaosLevelUp.remove(key);
+        return nivel == null ? 0 : nivel;
+    }
+
+    /**
+     * Los lives con estado en este resolver, en el orden en el que llegaron. Lo usa el
+     * {@code LedgerStore} para guardar cada sesion bajo su propia clave en disco.
+     */
+    public Set<String> streamerIds() {
+        return Collections.unmodifiableSet(new LinkedHashSet<>(sessions.keySet()));
     }
 
     public MappingTable table() {
