@@ -301,7 +301,9 @@ public final class BossManager {
         maxHp = BossHealth.setMax(living, definition.hpFor(coins), vanillaMax);
         BossHealth.heal(living, maxHp, maxHp);
 
-        pdc.markBoss(living, definition.id(), donors, totalCoins, maxHp);
+        // El streamerId aun no viaja por BossManager (C7 lo hara); mientras tanto, el jefe
+        // queda marcado como del live "main", que es lo que ya ocurre en el servidor mono.
+        pdc.markBoss(living, definition.id(), donors, totalCoins, maxHp, "main");
         equip(living, definition, coins);
         nameplate(living);
 

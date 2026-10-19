@@ -28,6 +28,7 @@ public final class BossPdc {
     private final NamespacedKey maxHp;
     private final NamespacedKey phases;
     private final NamespacedKey minionOf;
+    private final NamespacedKey streamer;
 
     public BossPdc(Plugin plugin) {
         this.bossId = new NamespacedKey(plugin, "boss-id");
@@ -36,18 +37,24 @@ public final class BossPdc {
         this.maxHp = new NamespacedKey(plugin, "boss-max-hp");
         this.phases = new NamespacedKey(plugin, "boss-phases");
         this.minionOf = new NamespacedKey(plugin, "boss-minion-of");
+        this.streamer = new NamespacedKey(plugin, "boss-streamer");
     }
 
     // ------------------------------------------------------------------ jefe
 
     public void markBoss(Entity entity, String definitionId, List<String> donorNames,
-                         int totalCoins, double hpMax) {
+                         int totalCoins, double hpMax, String streamerId) {
         PersistentDataContainer pdc = entity.getPersistentDataContainer();
         pdc.set(bossId, PersistentDataType.STRING, definitionId);
         pdc.set(donors, PersistentDataType.STRING, BossTitle.store(donorNames));
         pdc.set(coins, PersistentDataType.INTEGER, Math.max(0, totalCoins));
         pdc.set(maxHp, PersistentDataType.DOUBLE, hpMax);
         pdc.set(phases, PersistentDataType.INTEGER, 0);
+        // El id del live que invoco al jefe viaja con la entidad: al re-adoptar un jefe
+        // tras un /reload o una recarga de chunk, hace falta saber a que streamer pertenecia
+        // (si no, el jefe se queda huerfano y los esbirros caen en el live equivocado).
+        pdc.set(streamer, PersistentDataType.STRING,
+                streamerId == null || streamerId.isBlank() ? "main" : streamerId);
     }
 
     public boolean isBoss(Entity entity) {
@@ -82,6 +89,12 @@ public final class BossPdc {
 
     public void setMaxHp(Entity entity, double value) {
         entity.getPersistentDataContainer().set(maxHp, PersistentDataType.DOUBLE, value);
+    }
+
+    /** Id del live que invoco a este jefe. "main" si la entidad es de antes de C6. */
+    public String streamerId(Entity entity) {
+        String stored = read(entity, streamer, PersistentDataType.STRING, null);
+        return stored == null || stored.isBlank() ? "main" : stored;
     }
 
     /** Bits de fase ya disparada: 1 = esbirros, 2 = furia. */
