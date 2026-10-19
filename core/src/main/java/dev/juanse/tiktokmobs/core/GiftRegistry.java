@@ -21,7 +21,12 @@ import java.util.concurrent.ConcurrentHashMap;
 public final class GiftRegistry {
 
     /** Un regalo observado: lo que TikTok mandó, no lo que supusimos. */
-    public record Seen(int id, String name, int coins, int times, boolean explicitlyMapped) {
+    public record Seen(int id, String name, int coins, int times, boolean explicitlyMapped,
+                       String imageUrl) {
+
+        public Seen {
+            imageUrl = imageUrl == null ? "" : imageUrl;
+        }
     }
 
     private final Map<Integer, Seen> byId = new ConcurrentHashMap<>();
@@ -39,15 +44,33 @@ public final class GiftRegistry {
         byId.compute(key, (id, previous) -> {
             if (previous == null) {
                 isNew[0] = true;
-                return new Seen(id, gift.name(), gift.coins(), 1, explicitlyMapped);
+                return new Seen(id, gift.name(), gift.coins(), 1, explicitlyMapped,
+                        gift.imageUrl());
             }
             // El nombre puede llegar vacío en algún evento: nos quedamos con el que sí tenga.
+            // Lo mismo con la imagen: un evento sin ella no borra la que ya teníamos.
             String name = previous.name().isBlank() ? gift.name() : previous.name();
             int coins = gift.coins() > 0 ? gift.coins() : previous.coins();
-            return new Seen(id, name, coins, previous.times() + 1, explicitlyMapped);
+            String imagen = gift.imageUrl().isBlank() ? previous.imageUrl() : gift.imageUrl();
+            return new Seen(id, name, coins, previous.times() + 1, explicitlyMapped, imagen);
         });
 
         return isNew[0];
+    }
+
+    /**
+     * Recupera un regalo aprendido en una sesión anterior.
+     *
+     * <p>Sin esto, el catálogo que el plugin aprende se pierde en cada reinicio y el panel
+     * acaba enseñando ocho filas numeradas sin forma de saber cuál es la rosa. El id sin su
+     * nombre no sirve de nada para quien está configurando.
+     *
+     * <p>No pisa lo visto en esta sesión: lo de ahora siempre es más fresco que lo del disco.
+     */
+    public void restore(int id, String name, int coins, int times, String imageUrl) {
+        if (id <= 0) return;
+        byId.putIfAbsent(id, new Seen(id, name == null ? "" : name,
+                Math.max(0, coins), Math.max(0, times), false, imageUrl));
     }
 
     /** Lo visto, de más caro a más barato. */

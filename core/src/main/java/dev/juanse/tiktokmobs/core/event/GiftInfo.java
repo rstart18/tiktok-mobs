@@ -14,12 +14,26 @@ public record GiftInfo(int id,
                        int coins,
                        int count,
                        boolean streakable,
-                       boolean repeatEnd) {
+                       boolean repeatEnd,
+                       String imageUrl) {
 
     public GiftInfo {
         name = name == null ? "" : name.trim();
         coins = Math.max(0, coins);
         count = Math.max(1, count);
+        imageUrl = imageUrl == null ? "" : imageUrl.trim();
+    }
+
+    /**
+     * Sin imagen. La mayoría del código no sabe ni le importa que exista.
+     *
+     * <p>Existe para no romper todo lo que ya construía un GiftInfo cuando se añadió la
+     * imagen: un campo nuevo en un record obliga a tocar cada sitio que lo instancia, y
+     * varios de esos sitios son tests que no tienen nada que ver con imágenes.
+     */
+    public GiftInfo(int id, String name, int coins, int count,
+                    boolean streakable, boolean repeatEnd) {
+        this(id, name, coins, count, streakable, repeatEnd, "");
     }
 
     /** Un regalo no repetible, de una sola unidad. */

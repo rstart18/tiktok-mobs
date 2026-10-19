@@ -54,6 +54,27 @@ public final class LedgerStore {
                     yaml.getInt("chaos-donations", 0),
                     yaml.getInt("chaos-level", 0));
 
+            // Los regalos aprendidos: id -> nombre y monedas. Sin esto, el panel enseña
+            // los ids pelados tras cada reinicio y no hay forma de saber cuál es la rosa.
+            int regalos = 0;
+            if (yaml.isConfigurationSection("gifts-vistos")) {
+                var seccion = yaml.getConfigurationSection("gifts-vistos");
+                for (String rawId : seccion.getKeys(false)) {
+                    try {
+                        int id = Integer.parseInt(rawId);
+                        resolver.gifts().restore(id,
+                                seccion.getString(rawId + ".nombre", ""),
+                                seccion.getInt(rawId + ".monedas", 0),
+                                seccion.getInt(rawId + ".veces", 0),
+                                seccion.getString(rawId + ".imagen", ""));
+                        regalos++;
+                    } catch (NumberFormatException ignored) {
+                        // una clave que no es un id: no es motivo para abortar la carga
+                    }
+                }
+            }
+
+            plugin.getLogger().info("[ledger] " + regalos + " regalo(s) conocidos recuperados");
             plugin.getLogger().info("[ledger] recuperado: "
                     + resolver.ledger().totalCoins() + " monedas, "
                     + donantes.size() + " donantes, "
@@ -73,6 +94,14 @@ public final class LedgerStore {
             yaml.set("total-coins", resolver.ledger().totalCoins());
             yaml.set("chaos-level", resolver.chaos().level());
             yaml.set("chaos-donations", resolver.chaos().donations());
+
+            for (var visto : resolver.gifts().seen()) {
+                String ruta = "gifts-vistos." + visto.id();
+                yaml.set(ruta + ".nombre", visto.name());
+                yaml.set(ruta + ".monedas", visto.coins());
+                yaml.set(ruta + ".veces", visto.times());
+                if (!visto.imageUrl().isBlank()) yaml.set(ruta + ".imagen", visto.imageUrl());
+            }
             resolver.ledger().snapshot().forEach((nombre, monedas) ->
                     yaml.set("donors." + nombre, monedas));
 

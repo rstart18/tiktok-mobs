@@ -63,6 +63,13 @@
     font-size:12px;text-transform:uppercase;letter-spacing:.05em;
     color:var(--suave);background:rgba(127,127,127,.06);position:sticky;top:0;
   }
+  .regalo{display:flex;align-items:center;gap:10px;}
+  /* El icono del regalo viene del CDN de TikTok, la misma URL que manda TikFinity en el
+     evento. No guardamos ninguna imagen: si no carga, se cae sola y queda el nombre. */
+  .regalo img{
+    width:34px;height:34px;flex:0 0 auto;object-fit:contain;border-radius:6px;
+  }
+  .regalo .texto{min-width:0;}
   .regalo .nombre{font-weight:600;}
   .regalo .meta{font-size:12px;color:var(--suave);font-variant-numeric:tabular-nums;}
 
@@ -230,7 +237,15 @@ function pintarIds(){
   (datos.regalos || []).forEach(r => porId.set(r.id, {...r}));
   Object.keys(datos.mapeos || {}).forEach(id => {
     const numero = Number(id);
-    if(!porId.has(numero)) porId.set(numero, {id:numero, nombre:'(mapeado, sin entrar hoy)', monedas:0, veces:0});
+    if(porId.has(numero)) return;
+    // Todavia no ha entrado en esta sesion: se usa la etiqueta del config como nombre.
+    // Un id pelado no le dice nada a nadie cuando esta configurando.
+    const etiqueta = (datos.mapeos[id].label || '').trim();
+    porId.set(numero, {
+      id: numero,
+      nombre: etiqueta || ('regalo ' + numero),
+      monedas: 0, veces: 0, sinEntrar: true,
+    });
   });
 
   if(!porId.size){
@@ -253,10 +268,19 @@ function filaRegalo(regalo){
 
   const info = document.createElement('div');
   info.className = 'regalo';
-  info.innerHTML = '<div class="nombre"></div><div class="meta"></div>';
+  info.innerHTML = '<div class="texto"><div class="nombre"></div><div class="meta"></div></div>';
+
+  if(regalo.imagen){
+    const icono = document.createElement('img');
+    icono.src = regalo.imagen;
+    icono.alt = '';
+    icono.onerror = () => icono.remove();
+    info.prepend(icono);
+  }
   info.querySelector('.nombre').textContent = regalo.nombre || ('id ' + regalo.id);
-  info.querySelector('.meta').textContent =
-    `id ${regalo.id} · ${regalo.monedas} monedas · x${regalo.veces}`;
+  info.querySelector('.meta').textContent = regalo.sinEntrar
+    ? `id ${regalo.id} · sin entrar en esta sesión`
+    : `id ${regalo.id} · ${regalo.monedas} monedas · x${regalo.veces}`;
   div.appendChild(info);
 
   camposComunes(div, actual);

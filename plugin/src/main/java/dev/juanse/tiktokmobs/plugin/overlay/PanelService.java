@@ -73,6 +73,7 @@ public final class PanelService implements OverlayServer.PanelHooks {
             item.addProperty("nombre", visto.name());
             item.addProperty("monedas", visto.coins());
             item.addProperty("veces", visto.times());
+            item.addProperty("imagen", visto.imageUrl());
             regalos.add(item);
         }
         raiz.add("regalos", regalos);

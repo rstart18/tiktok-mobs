@@ -133,6 +133,36 @@ class TikFinityParserTest {
     }
 
     @Test
+    void elRegaloTraeLaUrlDeSuImagen() {
+        // Es la URL del CDN de TikTok que manda el propio evento: con ella el panel y el
+        // catalogo enseñan el icono de verdad sin que nosotros guardemos nada ajeno.
+        GiftEvent evento = TikFinityParser.parse("""
+                {"event":"gift","data":{"uniqueId":"ana","giftId":5655,"giftName":"Rosa",
+                 "diamondCount":1,"giftPictureUrl":"https://p16.tiktokcdn.com/rosa.webp"}}
+                """).orElseThrow();
+
+        assertEquals("https://p16.tiktokcdn.com/rosa.webp", evento.gift().imageUrl());
+    }
+
+    @Test
+    void laImagenAceptaLosAliasConocidos() {
+        for (String campo : new String[]{"giftPictureUrl", "giftImage", "image", "icon"}) {
+            GiftEvent evento = TikFinityParser.parse(
+                    "{\"event\":\"gift\",\"data\":{\"giftId\":1,\"giftName\":\"x\",\"" + campo
+                            + "\":\"http://img\"}}").orElseThrow();
+            assertEquals("http://img", evento.gift().imageUrl(), "fallo con el campo " + campo);
+        }
+    }
+
+    @Test
+    void sinImagenNoPasaNada() {
+        GiftEvent evento = TikFinityParser.parse(
+                "{\"event\":\"gift\",\"data\":{\"giftId\":1,\"giftName\":\"x\"}}").orElseThrow();
+
+        assertEquals("", evento.gift().imageUrl(), "nunca null: el resto del codigo no lo espera");
+    }
+
+    @Test
     void elComentarioLlegaConSuTexto() {
         GiftEvent evento = TikFinityParser.parse("""
                 {"event":"chat","data":{"uniqueId":"ana","nickname":"Ana","comment":"hola juanse"}}

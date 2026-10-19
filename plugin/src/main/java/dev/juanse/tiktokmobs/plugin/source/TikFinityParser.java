@@ -90,7 +90,13 @@ public final class TikFinityParser {
         // frente a quedarnos esperando un repeatEnd que nunca llega.
         boolean repeatEnd = bool(data, true, "repeatEnd", "repeat_end", "giftEnd");
 
-        return new GiftInfo(giftId, giftName, coins, count, streakable, repeatEnd);
+        // La imagen del regalo viene en el propio evento: es la URL del CDN de TikTok, la
+        // misma que ve TikFinity. Así el panel y el catálogo pueden enseñar el icono de
+        // verdad sin que nosotros guardemos ni repartamos ninguna imagen ajena.
+        String imagen = string(data, "giftPictureUrl", "giftPicture", "giftImage", "giftIcon",
+                "image", "pictureUrl", "picture", "icon");
+
+        return new GiftInfo(giftId, giftName, coins, count, streakable, repeatEnd, imagen);
     }
 
     private static boolean has(JsonObject object, String... keys) {
