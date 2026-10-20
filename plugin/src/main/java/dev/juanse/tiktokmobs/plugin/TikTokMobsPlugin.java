@@ -26,6 +26,9 @@ import dev.juanse.tiktokmobs.plugin.ui.BossTracker;
 import dev.juanse.tiktokmobs.plugin.ui.ChatRelay;
 import dev.juanse.tiktokmobs.plugin.ui.DonorBoard;
 import dev.juanse.tiktokmobs.plugin.ui.GoalBar;
+import dev.juanse.tiktokmobs.plugin.ui.LifeBar;
+import dev.juanse.tiktokmobs.plugin.ui.LikeGoalBar;
+import dev.juanse.tiktokmobs.plugin.ui.MissionBar;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.command.PluginCommand;
@@ -63,6 +66,9 @@ public final class TikTokMobsPlugin extends JavaPlugin implements Listener {
     private dev.juanse.tiktokmobs.plugin.runtime.Spectacle spectacle;
     private dev.juanse.tiktokmobs.plugin.config.CatalogStore catalogStore;
     private GoalBar goalBar;
+    private LifeBar lifeBar;
+    private LikeGoalBar likeGoalBar;
+    private MissionBar missionBar;
     private DonorBoard donorBoard;
 
     private LedgerStore ledgerStore;
@@ -92,6 +98,23 @@ public final class TikTokMobsPlugin extends JavaPlugin implements Listener {
         getServer().getPluginManager().registerEvents(new BossListener(bossManager, bossPdc), this);
         getServer().getPluginManager().registerEvents(
                 new dev.juanse.tiktokmobs.plugin.runtime.SpectacleListener(spectacle), this);
+        // Las explosiones de donacion no se comen el mundo. Solo las marcadas: un creeper
+        // natural sigue explotando como siempre.
+        getServer().getPluginManager().registerEvents(
+                new dev.juanse.tiktokmobs.plugin.runtime.ExplosionGuard(this), this);
+        dev.juanse.tiktokmobs.plugin.runtime.WorldEvents.setMark(
+                new dev.juanse.tiktokmobs.plugin.runtime.SpawnMark(this));
+        // Las muertes gastan vidas; el regalo 'vida_extra' las devuelve.
+        getServer().getPluginManager().registerEvents(
+                new dev.juanse.tiktokmobs.plugin.runtime.LifeListener(
+                        this, targets, spawnRegistry, id -> resolver.vidas(id)), this);
+        dev.juanse.tiktokmobs.plugin.runtime.WorldEvents.setDarVida(
+                streamerId -> resolver.vidas(streamerId).ganar());
+        // La mision cuenta bloques picados, no objetos: una donacion no puede minar por ti.
+        getServer().getPluginManager().registerEvents(
+                new dev.juanse.tiktokmobs.plugin.runtime.MissionListener(
+                        this, targets, id -> resolver.mision(id), id -> resolver.vidas(id),
+                        bloquesDeLaMision(), settings.mapping().misionVidas()), this);
 
         getLogger().info("listo. Fuente: " + sourceDescription());
         getLogger().info(BedrockCompat.describe());
@@ -106,6 +129,26 @@ public final class TikTokMobsPlugin extends JavaPlugin implements Listener {
     }
 
     // ---------------------------------------------------------------- ciclo de vida
+
+    /**
+     * Los bloques que cuentan para la mision, resueltos <b>por nombre</b>. Nunca por
+     * constante de enum: los nombres cambian entre versiones de 1.21.x y un enum que no
+     * existe no compila, mientras que un nombre que no existe solo se ignora con un aviso.
+     */
+    private java.util.Set<org.bukkit.Material> bloquesDeLaMision() {
+        java.util.Set<org.bukkit.Material> out = new java.util.HashSet<>();
+        for (String crudo : settings.mapping().misionBloques().split(",")) {
+            String nombre = crudo.trim();
+            if (nombre.isEmpty()) continue;
+            org.bukkit.Material material = org.bukkit.Material.matchMaterial(nombre);
+            if (material == null) {
+                getLogger().warning("[mision] bloque desconocido: '" + nombre + "'");
+                continue;
+            }
+            out.add(material);
+        }
+        return out;
+    }
 
     private void bootstrap() {
         // El panel escribe su propio archivo y manda sobre el bloque gift-ids del config.
@@ -160,6 +203,25 @@ public final class TikTokMobsPlugin extends JavaPlugin implements Listener {
         if (settings.goalBar() && settings.mapping().donationGoalCoins() > 0) {
             goalBar = new GoalBar(this, resolver.ledger());
             goalBar.start();
+        }
+
+        // Las vidas: el contador que convierte muertes en marcador. Siempre visible, porque
+        // un contador que no se ve no cambia el comportamiento de nadie.
+        {
+            lifeBar = new LifeBar(this, resolver.vidas("main"));
+            lifeBar.start();
+        }
+
+        // La meta de likes, solo si esta configurada: sin objetivo no hay barra que pintar.
+        if (resolver.likeGoal("main").activa()) {
+            likeGoalBar = new LikeGoalBar(this, resolver.likeGoal("main"), resolver.likes("main"));
+            likeGoalBar.start();
+        }
+
+        // La mision del streamer: lo unico del directo que no mueve el publico.
+        if (resolver.mision("main").activa()) {
+            missionBar = new MissionBar(this, resolver.mision("main"));
+            missionBar.start();
         }
         if (settings.scoreboard()) {
             donorBoard = new DonorBoard(this, resolver.ledger(), settings.scoreboardSize());
@@ -257,9 +319,15 @@ public final class TikTokMobsPlugin extends JavaPlugin implements Listener {
         if (bossManager != null) bossManager.stop();
         if (bossTracker != null) bossTracker.stop();
         if (goalBar != null) goalBar.stop();
+        if (lifeBar != null) lifeBar.stop();
+        if (likeGoalBar != null) likeGoalBar.stop();
+        if (missionBar != null) missionBar.stop();
         if (donorBoard != null) donorBoard.stop();
         stopOverlay();
         goalBar = null;
+        lifeBar = null;
+        likeGoalBar = null;
+        missionBar = null;
         donorBoard = null;
     }
 
@@ -318,6 +386,9 @@ public final class TikTokMobsPlugin extends JavaPlugin implements Listener {
     @EventHandler
     public void onJoin(PlayerJoinEvent event) {
         if (goalBar != null) goalBar.showTo(event.getPlayer());
+        if (lifeBar != null) lifeBar.showTo(event.getPlayer());
+        if (likeGoalBar != null) likeGoalBar.showTo(event.getPlayer());
+        if (missionBar != null) missionBar.showTo(event.getPlayer());
         if (donorBoard != null) donorBoard.showTo(event.getPlayer());
         if (bossTracker != null) bossTracker.showAllTo(event.getPlayer());
         if (bossManager != null) bossManager.showTo(event.getPlayer());

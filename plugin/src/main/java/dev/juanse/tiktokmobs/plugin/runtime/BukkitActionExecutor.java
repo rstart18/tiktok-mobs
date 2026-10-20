@@ -36,6 +36,7 @@ public final class BukkitActionExecutor implements ActionExecutor {
     private final BossTracker bossTracker;
     private final BossManager bosses;
     private final OverlayFeed overlay;
+    private final SpawnMark mark;
 
     private volatile PluginSettings settings;
     private volatile TitleFeed titles;
@@ -54,6 +55,7 @@ public final class BukkitActionExecutor implements ActionExecutor {
         this.bossTracker = bossTracker;
         this.bosses = bosses;
         this.overlay = overlay == null ? OverlayFeed.DISABLED : overlay;
+        this.mark = new SpawnMark(plugin);
         this.settings = settings;
         this.titles = new TitleFeed(settings.titleFeed(), settings.titleGapMs());
     }
@@ -159,7 +161,11 @@ public final class BukkitActionExecutor implements ActionExecutor {
                     "ruleta_rusa",
                     // Te manda al Nether una vez; repetirlo en el mismo tick no hace nada.
                     "nether",
-                    "taladro");
+                    "taladro",
+                    // Una horda ya son 3 oleadas y 20 bichos. Diez hordas encadenadas por
+                    // una sola donacion no son diez veces mas espectaculo, son el servidor
+                    // a 4 TPS y el live terminado.
+                    "horda");
 
     /**
      * Ejecuta el evento de mundo tantas veces como la donación dé de sí.
@@ -168,6 +174,21 @@ public final class BukkitActionExecutor implements ActionExecutor {
      * 3 rayos que una. Para el que donó eso se ve exactamente igual que si no hubiera
      * funcionado, y es la queja más repetida del proyecto.
      */
+    /**
+     * Dispara un evento de mundo <b>sin donacion detras</b>. Lo usa la meta de likes, que no
+     * viene de un regalo sino de un contador colectivo.
+     *
+     * <p>Hilo principal, como todo lo demas de esta clase.
+     */
+    public void runWorldEvent(String eventId, String streamerId) {
+        if (eventId == null || eventId.isBlank()) return;
+
+        Location at = targets.resolve(streamerId);
+        if (at == null) return;
+
+        WorldEvents.run(eventId, at, registry, targets.resolvePlayer(streamerId), streamerId);
+    }
+
     private boolean runWorldEvent(ResolvedAction action, Location at) {
         String id = action.spec().worldEventId();
 
@@ -249,13 +270,40 @@ public final class BukkitActionExecutor implements ActionExecutor {
         // candidatos colapsen en el mismo sitio.
         java.util.Set<Long> ocupados = new java.util.HashSet<>();
 
+        // A quien le salen. Se resuelve una vez y no por mob: con veinte creepers, veinte
+        // busquedas del jugador mas cercano en el mismo tick se notan en el TPS.
+        Player objetivo = targets.resolvePlayer(action.streamerId());
+
         for (int i = 0; i < count; i++) {
             Location where = safeSpawn(at, spec.radius(), i, count, ocupados);
             Entity entity = at.getWorld().spawnEntity(where, type);
             if (spec.nameplate()) {
                 nameplate(entity, action.donorLabel());
             }
+            marcarYArmar(entity, objetivo);
             registry.track(action.streamerId(), entity);
+        }
+    }
+
+    /**
+     * Lo que convierte un mob invocado en una donacion que se nota.
+     *
+     * <p><b>El objetivo:</b> sin esto solo "funcionan" los mobs hostiles por naturaleza. El
+     * enderman es neutral: aparece, se queda quieto y se teletransporta solo, asi que pagar
+     * por tres era pagar por tres estatuas. La arania, ademas, es neutral de dia. Fijandoles
+     * el objetivo, todo lo que invoca una donacion va a por su jugador desde el primer tick.
+     *
+     * <p><b>El creeper cargado:</b> potencia 6 en vez de 3. Se ve y se oye el doble, y el
+     * {@link ExplosionGuard} se encarga de que no se lleve el terreno por delante.
+     */
+    private void marcarYArmar(Entity entity, Player objetivo) {
+        mark.marcar(entity);
+
+        if (entity instanceof org.bukkit.entity.Creeper creeper) {
+            creeper.setPowered(true);
+        }
+        if (entity instanceof org.bukkit.entity.Mob mob && objetivo != null) {
+            mob.setTarget(objetivo);
         }
     }
 

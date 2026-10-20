@@ -37,6 +37,14 @@ public final class MappingTable {
     private final List<Tier> tiers;
     private final List<CatalogEntry> catalog;
     private final int likeEvery;
+    private final int likeGoal;
+    private final String likeGoalLabel;
+    private final String likeGoalEvent;
+    private final String misionLabel;
+    private final int misionObjetivo;
+    private final String misionBloques;
+    private final int misionEscalada;
+    private final int misionVidas;
     private final int donationGoalCoins;
     private final ActionSpec goalReward;
 
@@ -51,6 +59,14 @@ public final class MappingTable {
         sorted.sort((x, y) -> Integer.compare(x.maxCoins(), y.maxCoins()));
         this.tiers = List.copyOf(sorted);
         this.likeEvery = Math.max(1, b.likeEvery);
+        this.likeGoal = Math.max(0, b.likeGoal);
+        this.likeGoalLabel = b.likeGoalLabel;
+        this.likeGoalEvent = b.likeGoalEvent;
+        this.misionLabel = b.misionLabel;
+        this.misionObjetivo = Math.max(0, b.misionObjetivo);
+        this.misionBloques = b.misionBloques;
+        this.misionEscalada = Math.max(0, b.misionEscalada);
+        this.misionVidas = Math.max(0, b.misionVidas);
         this.donationGoalCoins = Math.max(0, b.donationGoalCoins);
         this.goalReward = b.goalReward == null ? ActionSpec.NONE : b.goalReward;
     }
@@ -103,6 +119,42 @@ public final class MappingTable {
 
     public Optional<ActionSpec> forEventType(EventType type) {
         return Optional.ofNullable(byEventType.get(type));
+    }
+
+    public int likeGoal() {
+        return likeGoal;
+    }
+
+    public String likeGoalLabel() {
+        return likeGoalLabel;
+    }
+
+    /** Que evento de mundo se dispara al completar la meta de likes. */
+    public String likeGoalEvent() {
+        return likeGoalEvent;
+    }
+
+    public String misionLabel() {
+        return misionLabel;
+    }
+
+    public int misionObjetivo() {
+        return misionObjetivo;
+    }
+
+    /** Bloques que cuentan para la mision, separados por coma. */
+    public String misionBloques() {
+        return misionBloques;
+    }
+
+    /** Cuanto sube el objetivo de la mision con cada vuelta cumplida. */
+    public int misionEscalada() {
+        return misionEscalada;
+    }
+
+    /** Vidas que devuelve cumplir la mision. */
+    public int misionVidas() {
+        return misionVidas;
     }
 
     public int likeEvery() {
@@ -163,6 +215,14 @@ public final class MappingTable {
         private final Map<EventType, ActionSpec> byEventType = new EnumMap<>(EventType.class);
         private final List<Tier> tiers = new ArrayList<>();
         private int likeEvery = 100;
+        private int likeGoal = 0;
+        private String likeGoalLabel = "META";
+        private String likeGoalEvent = "";
+        private String misionLabel = "MISION";
+        private int misionObjetivo = 0;
+        private String misionBloques = "DIAMOND_ORE,DEEPSLATE_DIAMOND_ORE";
+        private int misionEscalada = 0;
+        private int misionVidas = 3;
         private int donationGoalCoins = 0;
         private ActionSpec goalReward = ActionSpec.NONE;
 
@@ -210,6 +270,58 @@ public final class MappingTable {
             if (type != null && spec != null) byEventType.put(type, spec);
             return this;
         }
+
+        public Builder misionLabel(String value) {
+            if (value != null && !value.isBlank()) this.misionLabel = value.trim();
+            return this;
+        }
+
+        public Builder misionObjetivo(int value) {
+            this.misionObjetivo = Math.max(0, value);
+            return this;
+        }
+
+        public Builder misionBloques(String value) {
+            if (value != null && !value.isBlank()) this.misionBloques = value.trim();
+            return this;
+        }
+
+        public Builder misionEscalada(int value) {
+            this.misionEscalada = Math.max(0, value);
+            return this;
+        }
+
+        public Builder misionVidas(int value) {
+            this.misionVidas = Math.max(0, value);
+            return this;
+        }
+
+        public Builder likeGoal(int value) {
+
+            this.likeGoal = Math.max(0, value);
+
+            return this;
+
+        }
+
+
+        public Builder likeGoalLabel(String value) {
+
+            if (value != null && !value.isBlank()) this.likeGoalLabel = value.trim();
+
+            return this;
+
+        }
+
+
+        public Builder likeGoalEvent(String value) {
+
+            this.likeGoalEvent = value == null ? "" : value.trim();
+
+            return this;
+
+        }
+
 
         public Builder likeEvery(int every) {
             this.likeEvery = every;

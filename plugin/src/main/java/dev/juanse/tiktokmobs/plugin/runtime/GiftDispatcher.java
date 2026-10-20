@@ -149,6 +149,7 @@ public final class GiftDispatcher {
             // El nivel de caos solo vale si se ve. Anunciarlo es la mitad del invento:
             // es lo que convierte donaciones sueltas en una carrera colectiva.
             int nivelNuevo = resolver.takeChaosLevelUp();
+            int metasDeLikes = resolver.takeLikeGoalReached(incoming.streamerId());
             if (nivelNuevo > 0) {
                 var chaos = resolver.chaos();
                 String aviso = "&4&l☠ NIVEL DE CAOS " + nivelNuevo + " &7- todo sale x"
@@ -159,6 +160,25 @@ public final class GiftDispatcher {
                 }
                 plugin.getLogger().info("[caos] nivel " + nivelNuevo
                         + " (x" + chaos.multiplier() + ")");
+            }
+
+            // La meta de likes: el unico objetivo en el que participa quien no gasta nada.
+            // Se anuncia con su nombre porque "60.000 likes" no le dice nada a nadie y
+            // "el WITHER sale a los 60.000" se explica solo.
+            if (metasDeLikes > 0) {
+                var meta = resolver.likeGoal(incoming.streamerId());
+                String aviso = "&d&l\u2605 " + meta.label() + " &7- meta de &d"
+                        + meta.target() + "&7 likes completada";
+                for (var player : Bukkit.getOnlinePlayers()) {
+                    player.sendMessage(Messages.color(aviso));
+                }
+                // Tope de 2, igual que la meta de donacion: un lote gigante no puede
+                // encadenar diez premios y tumbar el tick.
+                for (int premio = 0; premio < Math.min(metasDeLikes, 2); premio++) {
+                    executor.runWorldEvent(resolver.table().likeGoalEvent(),
+                            incoming.streamerId());
+                }
+                plugin.getLogger().info("[likes] meta '" + meta.label() + "' x" + metasDeLikes);
             }
 
             for (ResolvedAction action : actions) {

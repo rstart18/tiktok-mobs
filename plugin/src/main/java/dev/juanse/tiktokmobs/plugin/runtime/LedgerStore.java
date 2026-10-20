@@ -99,11 +99,19 @@ public final class LedgerStore {
 
         resolver.ledger("main").restore(donantes);
         resolver.likes("main").restore(yaml.getInt("likes", 0));
+        // Sin esto, al primer like creeria que acaban de completarse de golpe todas las
+        // metas que ya llevaba el live y soltaria el premio una vez por cada una.
+        resolver.likeGoal("main").restoreFrom(resolver.likes("main").total());
+        resolver.mision("main").restore(yaml.getInt("mision", 0));
         // El caos es acumulado del live: si se reinicia el servidor a mitad, volver a nivel 0
         // le quita a la gente lo que ya habia pagado entre todos.
         resolver.chaos("main").restore(
                 yaml.getInt("chaos-donations", 0),
                 yaml.getInt("chaos-level", 0));
+        // Si el archivo es del formato viejo no trae vidas: -1 significa "no habia nada"
+        // y se deja el pool como arranco, lleno.
+        int vidas = yaml.getInt("vidas", -1);
+        if (vidas >= 0) resolver.vidas("main").restore(vidas);
     }
 
     private void loadStreamer(ConfigurationSection seccion, String streamerId) {
@@ -118,9 +126,13 @@ public final class LedgerStore {
 
         resolver.ledger(streamerId).restore(donantes);
         resolver.likes(streamerId).restore(seccion.getInt("likes", 0));
+        resolver.likeGoal(streamerId).restoreFrom(resolver.likes(streamerId).total());
+        resolver.mision(streamerId).restore(seccion.getInt("mision", 0));
         resolver.chaos(streamerId).restore(
                 seccion.getInt("chaos-donations", 0),
                 seccion.getInt("chaos-level", 0));
+        int vidas = seccion.getInt("vidas", -1);
+        if (vidas >= 0) resolver.vidas(streamerId).restore(vidas);
     }
 
     public void save() {
@@ -137,6 +149,8 @@ public final class LedgerStore {
                 yaml.set(ruta + "total-coins", resolver.ledger(streamerId).totalCoins());
                 yaml.set(ruta + "chaos-level", resolver.chaos(streamerId).level());
                 yaml.set(ruta + "chaos-donations", resolver.chaos(streamerId).donations());
+                yaml.set(ruta + "vidas", resolver.vidas(streamerId).vidas());
+                yaml.set(ruta + "mision", resolver.mision(streamerId).logrado());
 
                 resolver.ledger(streamerId).snapshot().forEach((nombre, monedas) ->
                         yaml.set(ruta + "donors." + nombre, monedas));

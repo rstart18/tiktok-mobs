@@ -43,6 +43,9 @@ public final class ActionResolver {
     /** Nivel al que acaba de subir el caos, por streamer. Se consume con takeChaosLevelUp. */
     private final Map<String, Integer> lastChaosLevelUp = new ConcurrentHashMap<>();
 
+    /** Metas de likes recien completadas, por streamer. Se consume con takeLikeGoalReached. */
+    private final Map<String, Integer> lastLikeGoal = new ConcurrentHashMap<>();
+
     public ActionResolver(MappingTable table, DedupPolicy dedup) {
         this(table, dedup, 20);
     }
@@ -57,7 +60,9 @@ public final class ActionResolver {
     private StreamerSession session(String streamerId) {
         String key = streamerId == null || streamerId.isBlank() ? "main" : streamerId;
         return sessions.computeIfAbsent(key, id -> new StreamerSession(
-                id, table.donationGoalCoins(), donacionesPorNivelDeCaos, table.likeEvery()));
+                id, table.donationGoalCoins(), donacionesPorNivelDeCaos, table.likeEvery(),
+                20, table.likeGoal(), table.likeGoalLabel(),
+                table.misionLabel(), table.misionObjetivo(), table.misionEscalada()));
     }
 
     public List<ResolvedAction> resolve(GiftEvent event) {
@@ -115,6 +120,13 @@ public final class ActionResolver {
     private List<ResolvedAction> likeActions(GiftEvent event, String donor, String streamerId,
                                              StreamerSession session) {
         int crossed = session.likes().add(event.likeCount());
+
+        // La meta grande se mide sobre el TOTAL, no sobre los umbrales pequenios: un lote que
+        // no llega a cruzar los 100 likes del 'every' puede perfectamente cruzar los 60.000
+        // de la meta, y si lo metieramos tras el return de abajo se perderia el premio.
+        int metas = session.likeGoal().record(session.likes().total());
+        if (metas > 0) lastLikeGoal.put(session.streamerId(), metas);
+
         if (crossed <= 0) return List.of();
 
         Optional<ActionSpec> spec = table.forEventType(EventType.LIKE);
@@ -179,6 +191,10 @@ public final class ActionResolver {
         return session(streamerId).ledger();
     }
 
+    public LifePool vidas(String streamerId) {
+        return session(streamerId).vidas();
+    }
+
     public ChaosLevel chaos(String streamerId) {
         return session(streamerId).chaos();
     }
@@ -188,6 +204,24 @@ public final class ActionResolver {
     }
 
     /** El nivel al que acaba de subir el caos de ese live, o 0. Para anunciarlo una sola vez. */
+    /**
+     * Cuantas metas de likes se completaron desde la ultima vez que se pregunto, y las
+     * descuenta. Mismo patron que el nivel de caos: quien lo consume lo anuncia una vez.
+     */
+    public int takeLikeGoalReached(String streamerId) {
+        String key = streamerId == null || streamerId.isBlank() ? "main" : streamerId;
+        Integer metas = lastLikeGoal.remove(key);
+        return metas == null ? 0 : metas;
+    }
+
+    public Mission mision(String streamerId) {
+        return session(streamerId).mision();
+    }
+
+    public LikeGoal likeGoal(String streamerId) {
+        return session(streamerId).likeGoal();
+    }
+
     public int takeChaosLevelUp(String streamerId) {
         String key = streamerId == null || streamerId.isBlank() ? "main" : streamerId;
         Integer nivel = lastChaosLevelUp.remove(key);

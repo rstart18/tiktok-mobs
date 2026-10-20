@@ -27,15 +27,31 @@ public final class WorldEvents {
 
     private static final Random RANDOM = new Random();
 
+    /**
+     * Lo que suelta el loot. Dos reglas, y las dos salen de un problema real:
+     *
+     * <ul>
+     *   <li><b>Nada que venda un regalo.</b> La manzana dorada estaba aqui y tambien la da
+     *       el Helado: regalar lo que vendes deja sin sentido el regalo que lo vende.</li>
+     *   <li><b>Nada que sea la mision.</b> El diamante estuvo aqui y duro poco: si la
+     *       mision del streamer es bajar a buscar diamantes, que se los regale una donacion
+     *       deja la busqueda sin sentido. El publico controla los obstaculos, no el
+     *       destino.</li>
+     *   <li><b>Consumibles, no capital.</b> Comida, flechas y perlas se gastan y
+     *       desaparecen. Diamantes y esmeraldas se quedan para siempre y cambian lo que
+     *       puedes construir, asi que repartirlos por acciones baratas se salta la
+     *       progresion entera de la partida.</li>
+     * </ul>
+     */
+
     private static final List<Material> LOOT = List.of(
-            Material.DIAMOND, Material.GOLDEN_APPLE, Material.IRON_INGOT,
-            Material.COOKED_BEEF, Material.ENDER_PEARL, Material.TNT,
-            Material.ARROW, Material.EMERALD);
+            Material.IRON_INGOT, Material.COOKED_BEEF, Material.BREAD,
+            Material.ENDER_PEARL, Material.TNT, Material.ARROW, Material.TORCH);
 
     public static final Set<String> AVAILABLE = Set.of(
             "tnt_rain", "random_loot", "night", "day", "thunder", "heal", "swarm_bats",
             "rayo", "water_drop", "ruleta",
-            "nether", "suelo_lava", "ruleta_rusa", "taladro");
+            "nether", "suelo_lava", "ruleta_rusa", "taladro", "vida_extra", "horda");
 
     /**
      * Alcance de un evento de mundo:
@@ -68,7 +84,9 @@ public final class WorldEvents {
             Map.entry("nether", Scope.LOCAL),
             Map.entry("suelo_lava", Scope.GLOBAL),
             Map.entry("ruleta_rusa", Scope.LOCAL),
-            Map.entry("taladro", Scope.LOCAL));
+            Map.entry("taladro", Scope.LOCAL),
+            Map.entry("vida_extra", Scope.LOCAL),
+            Map.entry("horda", Scope.LOCAL));
 
     /** Alcance declarado del evento, o LOCAL si no esta en la tabla (lo mas seguro). */
     public static Scope scopeOf(String id) {
@@ -81,6 +99,23 @@ public final class WorldEvents {
      * deshacerlos. Se cablea al arrancar el plugin.
      */
     private static volatile Spectacle spectacle;
+
+    /** La marca de "esto lo invoco una donacion". Se cablea al arrancar, igual que spectacle. */
+    private static volatile SpawnMark mark;
+
+    /**
+     * Da una vida al live de ese streamer y dice si subio. Lo pone el plugin al arrancar:
+     * WorldEvents no conoce las sesiones y no deberia, aqui solo se dispara el efecto.
+     */
+    private static volatile java.util.function.Predicate<String> darVida;
+
+    public static void setDarVida(java.util.function.Predicate<String> value) {
+        darVida = value;
+    }
+
+    public static void setMark(SpawnMark value) {
+        mark = value;
+    }
 
     public static void setSpectacle(Spectacle value) {
         spectacle = value;
@@ -96,7 +131,7 @@ public final class WorldEvents {
     private static final List<Premio> RULETA = List.of(
             new Premio("TOTEM", "&d", true),
             new Premio("MANZANA DORADA", "&6", true),
-            new Premio("DIAMANTES", "&b", true),
+            new Premio("PERLAS", "&5", true),
             new Premio("VIDA COMPLETA", "&a", true),
             new Premio("VELOCIDAD", "&a", true),
             new Premio("LOOT", "&e", true),
@@ -175,6 +210,19 @@ public final class WorldEvents {
             case "ruleta_rusa" -> {
                 if (nearest != null && spectacle != null) spectacle.ruletaRusa(nearest);
             }
+            case "horda" -> {
+                if (nearest != null && spectacle != null) {
+                    spectacle.horda(nearest, registry, mark, streamerId, 6);
+                }
+            }
+            case "vida_extra" -> {
+                // El contrapeso de todo lo que ataca. Si no se puede comprar defensa, el
+                // contador solo baja y el live se vuelve una cuenta atras sin agencia.
+                boolean subio = darVida != null && darVida.test(streamerId);
+                anunciar(subio
+                        ? "&a&l\u2764 +1 VIDA"
+                        : "&7\u2764 vida extra &8(ya estabas al maximo)");
+            }
             case "taladro" -> {
                 if (nearest != null && spectacle != null) spectacle.taladro(nearest, 60);
             }
@@ -182,6 +230,7 @@ public final class WorldEvents {
                 for (int i = 0; i < 20; i++) {
                     Entity bat = world.spawnEntity(at.clone().add(offset(5), 2, offset(5)),
                             org.bukkit.entity.EntityType.BAT);
+                    if (mark != null) mark.marcar(bat);
                     registry.track(streamerId, bat);
                 }
             }
@@ -205,7 +254,7 @@ public final class WorldEvents {
         switch (premio.nombre()) {
             case "TOTEM" -> dar(nearest, Material.TOTEM_OF_UNDYING, 1);
             case "MANZANA DORADA" -> dar(nearest, Material.GOLDEN_APPLE, 1);
-            case "DIAMANTES" -> dar(nearest, Material.DIAMOND, 3);
+            case "PERLAS" -> dar(nearest, Material.ENDER_PEARL, 3);
             case "VIDA COMPLETA" -> run("heal", at, registry, nearest, streamerId);
             case "VELOCIDAD" -> {
                 if (nearest != null) {
@@ -234,6 +283,13 @@ public final class WorldEvents {
                 Entity creeper = world.spawnEntity(
                         at.clone().add(offset(3), 0, offset(3)),
                         org.bukkit.entity.EntityType.CREEPER);
+                // El de la ruleta recibe el mismo trato que los invocados: cargado para que
+                // se vea, marcado para que no se coma el terreno.
+                if (mark != null) mark.marcar(creeper);
+                if (creeper instanceof org.bukkit.entity.Creeper c) c.setPowered(true);
+                if (creeper instanceof org.bukkit.entity.Mob m && nearest != null) {
+                    m.setTarget(nearest);
+                }
                 registry.track(streamerId, creeper);
             }
             default -> {

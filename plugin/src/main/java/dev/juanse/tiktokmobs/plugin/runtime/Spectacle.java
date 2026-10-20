@@ -320,6 +320,73 @@ public final class Spectacle {
         muertePorRuleta.clear();
     }
 
+
+    /**
+     * La HORDA: una invasion en oleadas, no un monton de mobs de golpe.
+     *
+     * <p>La diferencia importa. Treinta mobs apareciendo en el mismo tick son un borron: no
+     * se ve de donde salen, no da tiempo a reaccionar y el servidor se come el pico entero
+     * de una vez. En tres oleadas separadas hay <b>escalada</b>: la primera asusta, la
+     * segunda agobia y la tercera es la que te mata. Y el TPS reparte el coste.
+     *
+     * <p>Todos los mobs del reparto aguantan el sol. Es el mismo motivo por el que tu
+     * catalogo usa HUSK y no ZOMBIE: una horda que se quema sola a mediodia es una
+     * donacion desperdiciada.
+     */
+    public void horda(Player objetivo, SpawnRegistry registry, SpawnMark mark,
+                      String streamerId, int porOleada) {
+        if (objetivo == null) return;
+
+        // De menos a mas. La ultima trae creepers y un ravager: hasta ahi tienes que llegar.
+        List<List<String>> oleadas = List.of(
+                List.of("HUSK", "SPIDER"),
+                List.of("CAVE_SPIDER", "VINDICATOR", "PILLAGER", "HUSK"),
+                List.of("CREEPER", "WITCH", "RAVAGER", "VINDICATOR"));
+
+        for (int i = 0; i < oleadas.size(); i++) {
+            final int numero = i + 1;
+            final List<String> reparto = oleadas.get(i);
+            // La ultima es la gorda: mas bichos y el aviso en rojo.
+            final int cuantos = numero == oleadas.size() ? porOleada + 2 : porOleada;
+
+            programar(() -> {
+                if (!objetivo.isOnline() || objetivo.isDead()) return;
+                soltarOleada(objetivo, registry, mark, streamerId, reparto, cuantos);
+                titulo(objetivo, "HORDA",
+                        "oleada " + numero + " de " + oleadas.size(),
+                        numero == oleadas.size() ? NamedTextColor.DARK_RED : NamedTextColor.GOLD);
+                Fx.sound(objetivo.getLocation(), "minecraft:entity.ravager.roar",
+                        1.0f, numero == oleadas.size() ? 0.7f : 1.2f);
+            }, i * 40L);
+        }
+    }
+
+    private void soltarOleada(Player objetivo, SpawnRegistry registry, SpawnMark mark,
+                              String streamerId, List<String> reparto, int cuantos) {
+        World world = objetivo.getWorld();
+        Set<Long> ocupados = new HashSet<>();
+
+        for (int i = 0; i < cuantos; i++) {
+            String nombre = reparto.get(RANDOM.nextInt(reparto.size()));
+            org.bukkit.entity.EntityType tipo;
+            try {
+                tipo = org.bukkit.entity.EntityType.valueOf(nombre);
+            } catch (IllegalArgumentException ex) {
+                continue;   // un mob que esta version no tiene: se salta, no se rompe
+            }
+
+            Location donde = SafeSpawn.find(objetivo.getLocation(), 7, i, cuantos, ocupados);
+            if (donde == null) continue;
+
+            org.bukkit.entity.Entity bicho = world.spawnEntity(donde, tipo);
+            if (mark != null) mark.marcar(bicho);
+            if (bicho instanceof org.bukkit.entity.Creeper creeper) creeper.setPowered(true);
+            if (bicho instanceof org.bukkit.entity.Mob mob) mob.setTarget(objetivo);
+            // Pasa por el presupuesto de entidades del live: una horda no puede saltarselo.
+            registry.track(streamerId, bicho);
+        }
+    }
+
     private void programar(Runnable accion, long ticks) {
         tareas.addLast(Bukkit.getScheduler().runTaskLater(plugin, accion, ticks));
         // La cola no crece sin fin: las ya ejecutadas se van descartando.

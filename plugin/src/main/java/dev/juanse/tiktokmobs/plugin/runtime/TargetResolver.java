@@ -72,6 +72,37 @@ public final class TargetResolver {
     }
 
     /** El jugador al que se le aplican efectos. Puede ser null en modo arena sin nadie cerca. */
+    /**
+     * El jugador de un live concreto. Si esa fuente tiene jugador propio y esta conectado,
+     * los mobs le persiguen a el; si no, cae al objetivo general.
+     */
+    /**
+     * De que live es este jugador, o {@code null} si no es de ninguno.
+     *
+     * <p>Hace falta para no cobrarle vidas al live por la muerte de cualquiera que pase por
+     * el servidor. Si no hay nadie atado a una fuente concreta, el objetivo general cuenta
+     * como el live "main": es el caso normal de un streamer solo.
+     */
+    public String streamerOf(Player player) {
+        if (player == null) return null;
+
+        for (java.util.Map.Entry<String, String> e : byStreamer.entrySet()) {
+            if (player.getName().equals(e.getValue())) return e.getKey();
+        }
+        Player general = resolvePlayer();
+        return general != null && general.getUniqueId().equals(player.getUniqueId())
+                ? "main" : null;
+    }
+
+    public Player resolvePlayer(String streamerId) {
+        String name = byStreamer.get(streamerId);
+        if (name != null) {
+            Player player = Bukkit.getPlayerExact(name);
+            if (player != null && player.isOnline()) return player;
+        }
+        return resolvePlayer();
+    }
+
     public Player resolvePlayer() {
         if (settings.targetMode() == PluginSettings.TargetMode.PLAYER) {
             Player player = Bukkit.getPlayerExact(settings.targetPlayerName());

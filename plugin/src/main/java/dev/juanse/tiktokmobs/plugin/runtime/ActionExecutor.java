@@ -9,4 +9,13 @@ public interface ActionExecutor {
 
     /** Cuando el TPS cae, el dispatcher pide modo degradado: avisar sin spawnear. */
     void setDegraded(boolean degraded);
+
+    /**
+     * Dispara un evento de mundo que no viene de una donacion: hoy, el premio de la meta de
+     * likes. Por defecto no hace nada, para que un ejecutor de pruebas no tenga que
+     * implementarlo solo por existir.
+     */
+    default void runWorldEvent(String eventId, String streamerId) {
+        // sin efecto
+    }
 }

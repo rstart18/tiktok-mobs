@@ -57,7 +57,7 @@
   }
 
   .item{
-    width:94px;
+    width:76px;
     display:flex;flex-direction:column;align-items:center;gap:1px;
   }
 
@@ -65,14 +65,14 @@
      19px es el tope: con 26px, 'CREEPER' se sale de su casilla y se pisa con el
      de al lado, y entonces la regla deja de leerse como columnas. */
   .item .que{
-    font-size:17px;line-height:1.05;letter-spacing:0;
+    font-size:15px;line-height:1.05;letter-spacing:0;
     color:var(--amarillo);white-space:nowrap;
   }
   .item .que.fuerte{color:var(--rojo);}
   .item .que.bueno{color:var(--cian);}
 
   .item .ico{
-    width:76px;height:76px;
+    width:64px;height:64px;
     display:flex;align-items:center;justify-content:center;
   }
   .item .ico img{
@@ -87,7 +87,7 @@
      la palabra: reconoce la forma en la bandeja y la manda. Por eso va el icono y no
      el nombre, y por eso el orden es el mismo que el de la bandeja de TikTok. */
   .item .regalo{
-    width:54px;height:54px;margin-top:0;
+    width:46px;height:46px;margin-top:0;
     display:flex;align-items:center;justify-content:center;
   }
   .item .regalo img{
@@ -118,17 +118,20 @@ if (escala !== 1) {
    gancho mas barato que hay y lo primero que lee el ojo. Despues, de mas barato a
    mas caro, en el mismo orden que la bandeja de regalos de TikTok. */
 const ITEMS = [
-  {que:'RAYOS',   icono:'rayo.png',           regalo:'g_seguir.png',   clase:'fuerte'},
-  {que:'TOTEM',   icono:'totem.png',          regalo:'g_rosa.png',     clase:'bueno'},
-  {que:'RANDOM',  icono:'random.png',         regalo:'g_quiereme.png', clase:''},
-  {que:'ARAÑAS',  icono:'spider.png',         regalo:'g_gg.png',       clase:''},
-  {que:'ZOMBIS',  icono:'husk.png',           regalo:'g_tiktok.png',   clase:''},
-  {que:'MANZANA', icono:'manzana_dorada.png', regalo:'g_helado.png',   clase:'bueno'},
-  {que:'CREEPER', icono:'creeper.png',        regalo:'g_dedos.png',    clase:'fuerte'},
-  {que:'ENDER',   icono:'enderman.png',       regalo:'g_perfume.png',  clase:''},
-  {que:'BRUJAS',  icono:'witch.png',          regalo:'g_dona.png',     clase:'fuerte'},
-  {que:'AL CIELO',icono:'water_drop.png',     regalo:'g_manos.png',    clase:'bueno'},
-  {que:'JEFE',    icono:'jefe.png',           regalo:'g_galaxia.png',  clase:'fuerte'},
+  {que:'RAYOS',   icono:'rayo.png',           regalo:'g_seguir.png',     clase:'fuerte'},
+  {que:'TOTEM',   icono:'totem.png',          regalo:'g_rosa.png',       clase:'bueno'},
+  {que:'RANDOM',  icono:'random.png',         regalo:'g_quiereme.png',   clase:''},
+  {que:'ARAÑAS',  icono:'spider.png',         regalo:'g_gg.png',         clase:''},
+  {que:'ZOMBIS',  icono:'husk.png',           regalo:'g_tiktok.png',     clase:''},
+  {que:'MANZANA', icono:'manzana_dorada.png', regalo:'g_helado.png',     clase:'bueno'},
+  {que:'CREEPER', icono:'creeper.png',        regalo:'g_dedos.png',      clase:'fuerte'},
+  {que:'ENDER',   icono:'enderman.png',       regalo:'g_perfume.png',    clase:''},
+  {que:'BRUJAS',  icono:'witch.png',          regalo:'g_dona.png',       clase:'fuerte'},
+  {que:'CIELO',   icono:'water_drop.png',     regalo:'g_manos.png',      clase:'bueno'},
+  {que:'NETHER',  icono:'nether.png',         regalo:'g_danger_door.png',clase:'fuerte'},
+  {que:'TALADRO', icono:'taladro.png',        regalo:'g_gear.png',       clase:'bueno'},
+  {que:'LAVA',    icono:'suelo_lava.png',     regalo:'g_money_gun.png',  clase:'fuerte'},
+  {que:'JEFE',    icono:'jefe.png',           regalo:'g_galaxia.png',    clase:'fuerte'},
 ];
 
 /* Si falta un png, se pinta la inicial en vez de dejar el hueco:

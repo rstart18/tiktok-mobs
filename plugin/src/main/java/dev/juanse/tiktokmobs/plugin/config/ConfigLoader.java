@@ -176,7 +176,16 @@ public final class ConfigLoader {
 
     private static MappingTable mapping(FileConfiguration cfg, Logger log) {
         MappingTable.Builder builder = MappingTable.builder()
-                .likeEvery(cfg.getInt("likes.every", 100));
+                .likeEvery(cfg.getInt("likes.every", 100))
+                .likeGoal(cfg.getInt("likes.goal", 0))
+                .likeGoalLabel(cfg.getString("likes.goal-label", "META"))
+                .likeGoalEvent(cfg.getString("likes.goal-event", ""))
+                .misionLabel(cfg.getString("mision.label", "MISION"))
+                .misionObjetivo(cfg.getInt("mision.objetivo", 0))
+                .misionBloques(cfg.getString("mision.bloques",
+                        "DIAMOND_ORE,DEEPSLATE_DIAMOND_ORE"))
+                .misionEscalada(cfg.getInt("mision.escalada", 0))
+                .misionVidas(cfg.getInt("mision.vidas", 3));
 
         ConfigurationSection gifts = cfg.getConfigurationSection("gifts");
         if (gifts != null) {
