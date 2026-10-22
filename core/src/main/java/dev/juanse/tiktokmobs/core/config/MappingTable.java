@@ -47,6 +47,7 @@ public final class MappingTable {
     private final int misionVidas;
     private final java.util.List<dev.juanse.tiktokmobs.core.PhasePlan.Fase> fases;
     private final boolean fasesCiclicas;
+    private final boolean protegerBloques;
     private final int donationGoalCoins;
     private final ActionSpec goalReward;
 
@@ -71,6 +72,7 @@ public final class MappingTable {
         this.misionVidas = Math.max(0, b.misionVidas);
         this.fases = java.util.List.copyOf(b.fases);
         this.fasesCiclicas = b.fasesCiclicas;
+        this.protegerBloques = b.protegerBloques;
         this.donationGoalCoins = Math.max(0, b.donationGoalCoins);
         this.goalReward = b.goalReward == null ? ActionSpec.NONE : b.goalReward;
     }
@@ -170,6 +172,17 @@ public final class MappingTable {
         return fasesCiclicas;
     }
 
+    /**
+     * Si las explosiones de donacion respetan el terreno.
+     *
+     * <p>En survival si: un live de dos horas con creepers cargados deja el mapa picado y
+     * no hay deshacer. En un modo de construccion es al reves — <b>romper la obra es el
+     * juego</b>, y proteger los bloques dejaria el formato sin sentido.
+     */
+    public boolean protegerBloques() {
+        return protegerBloques;
+    }
+
     public int likeEvery() {
         return likeEvery;
     }
@@ -239,6 +252,7 @@ public final class MappingTable {
         private java.util.List<dev.juanse.tiktokmobs.core.PhasePlan.Fase> fases =
                 java.util.List.of();
         private boolean fasesCiclicas = false;
+        private boolean protegerBloques = true;
         private int donationGoalCoins = 0;
         private ActionSpec goalReward = ActionSpec.NONE;
 
@@ -304,6 +318,11 @@ public final class MappingTable {
 
         public Builder fases(java.util.List<dev.juanse.tiktokmobs.core.PhasePlan.Fase> value) {
             this.fases = value == null ? java.util.List.of() : java.util.List.copyOf(value);
+            return this;
+        }
+
+        public Builder protegerBloques(boolean value) {
+            this.protegerBloques = value;
             return this;
         }
 

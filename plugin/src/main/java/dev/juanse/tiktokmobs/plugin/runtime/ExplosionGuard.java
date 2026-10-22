@@ -24,8 +24,19 @@ public final class ExplosionGuard implements Listener {
 
     private final SpawnMark mark;
 
+    /**
+     * Si el modo activo quiere proteger el terreno. Es un supplier porque el modo cambia en
+     * caliente: leerlo en cada explosion hace que el guard siga al modo en vez de quedarse
+     * con el de cuando arranco el servidor.
+     */
+    private volatile java.util.function.BooleanSupplier protege = () -> true;
+
     public ExplosionGuard(Plugin plugin) {
         this.mark = new SpawnMark(plugin);
+    }
+
+    public void setProtege(java.util.function.BooleanSupplier value) {
+        this.protege = value == null ? () -> true : value;
     }
 
     /**
@@ -35,6 +46,8 @@ public final class ExplosionGuard implements Listener {
      */
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onExplode(EntityExplodeEvent event) {
+        // En un modo de construccion romper la obra ES el juego: ahi el guard se aparta.
+        if (!protege.getAsBoolean()) return;
         if (!mark.esDeDonacion(event.getEntity())) return;
         event.blockList().clear();
     }

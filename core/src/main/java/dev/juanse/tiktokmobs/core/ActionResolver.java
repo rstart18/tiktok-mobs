@@ -29,7 +29,7 @@ public final class ActionResolver {
     /** Techo de acciones generadas por un solo evento. Un lote de 5000 likes no rompe el tick. */
     private static final int MAX_ACTIONS_PER_EVENT = 5;
 
-    private final MappingTable table;
+    private volatile MappingTable table;
     private final DedupPolicy dedup;
     private final int donacionesPorNivelDeCaos;
     /**
@@ -238,6 +238,18 @@ public final class ActionResolver {
 
     public MappingTable table() {
         return table;
+    }
+
+    /**
+     * Cambia el catalogo en caliente, para los modos.
+     *
+     * <p>Las sesiones ya abiertas conservan su marcador, su nivel de caos y sus vidas: un
+     * cambio de formato a mitad de directo no deberia borrar lo que el publico lleva
+     * construido. Lo unico que cambia es a que accion mapea cada regalo de aqui en
+     * adelante.
+     */
+    public void setTable(MappingTable nueva) {
+        if (nueva != null) this.table = nueva;
     }
 
     public DedupPolicy dedup() {

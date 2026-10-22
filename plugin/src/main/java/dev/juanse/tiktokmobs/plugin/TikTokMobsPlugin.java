@@ -74,6 +74,9 @@ public final class TikTokMobsPlugin extends JavaPlugin implements Listener {
     private dev.juanse.tiktokmobs.core.PhasePlan phasePlan =
             dev.juanse.tiktokmobs.core.PhasePlan.apagado();
     private org.bukkit.scheduler.BukkitTask phaseTask;
+
+    /** El modo activo. "normal" es el catalogo de arriba del config.yml. */
+    private volatile String modoActivo = "normal";
     private DonorBoard donorBoard;
 
     private LedgerStore ledgerStore;
@@ -105,8 +108,9 @@ public final class TikTokMobsPlugin extends JavaPlugin implements Listener {
                 new dev.juanse.tiktokmobs.plugin.runtime.SpectacleListener(spectacle), this);
         // Las explosiones de donacion no se comen el mundo. Solo las marcadas: un creeper
         // natural sigue explotando como siempre.
-        getServer().getPluginManager().registerEvents(
-                new dev.juanse.tiktokmobs.plugin.runtime.ExplosionGuard(this), this);
+        var explosionGuard = new dev.juanse.tiktokmobs.plugin.runtime.ExplosionGuard(this);
+        explosionGuard.setProtege(() -> resolver.table().protegerBloques());
+        getServer().getPluginManager().registerEvents(explosionGuard, this);
         dev.juanse.tiktokmobs.plugin.runtime.WorldEvents.setMark(
                 new dev.juanse.tiktokmobs.plugin.runtime.SpawnMark(this));
         // Las muertes gastan vidas; el regalo 'vida_extra' las devuelve.
@@ -154,6 +158,74 @@ public final class TikTokMobsPlugin extends JavaPlugin implements Listener {
             out.add(material);
         }
         return out;
+    }
+
+    /**
+     * Monta (o remonta) el reloj del formato a partir de un catalogo.
+     *
+     * <p>Se llama al arrancar y en cada cambio de modo, porque cada modo trae sus propias
+     * fases: pasar a construccion y seguir con el reloj de survival no tendria sentido.
+     */
+    private void arrancarFases(dev.juanse.tiktokmobs.core.config.MappingTable tabla) {
+        if (phaseTask != null) {
+            phaseTask.cancel();
+            phaseTask = null;
+        }
+        if (phaseBar != null) {
+            phaseBar.stop();
+            phaseBar = null;
+        }
+
+        phasePlan = new dev.juanse.tiktokmobs.core.PhasePlan(tabla.fases(), tabla.fasesCiclicas());
+        phasePlan.iniciar(System.currentTimeMillis());
+        if (!phasePlan.activo()) return;
+
+        phaseBar = new PhaseBar(this, phasePlan);
+        phaseBar.start();
+        phaseTask = getServer().getScheduler().runTaskTimer(this, this::tickFases, 20L, 20L);
+        anunciarFase(phasePlan.actual());
+    }
+
+    public String modoActivo() {
+        return modoActivo;
+    }
+
+    public java.util.Set<String> modosDisponibles() {
+        return dev.juanse.tiktokmobs.plugin.config.ConfigLoader.modos(getConfig());
+    }
+
+    /**
+     * Cambia de catalogo en caliente.
+     *
+     * <p>El marcador, el caos y las vidas siguen donde estaban: cambiar de formato no borra
+     * lo que el publico lleva acumulado en el directo.
+     *
+     * @return true si el modo existia y se aplico.
+     */
+    public boolean cambiarModo(String nombre) {
+        String pedido = nombre == null ? "" : nombre.trim();
+
+        dev.juanse.tiktokmobs.core.config.MappingTable tabla;
+        if (pedido.isEmpty() || pedido.equalsIgnoreCase("normal")
+                || pedido.equalsIgnoreCase("defecto")) {
+            tabla = settings.mapping();
+            modoActivo = "normal";
+        } else {
+            tabla = dev.juanse.tiktokmobs.plugin.config.ConfigLoader.modo(
+                    getConfig(), pedido, getLogger());
+            if (tabla == null) return false;
+            modoActivo = pedido;
+        }
+
+        resolver.setTable(tabla);
+        arrancarFases(tabla);
+
+        String aviso = "&6&l\u2756 MODO &f" + modoActivo.toUpperCase(java.util.Locale.ROOT);
+        for (var player : getServer().getOnlinePlayers()) {
+            player.sendMessage(dev.juanse.tiktokmobs.plugin.runtime.Messages.color(aviso));
+        }
+        getLogger().info("[modo] activo: " + modoActivo);
+        return true;
     }
 
     /** Hace avanzar el reloj del formato y anuncia el cambio una sola vez. */
@@ -263,16 +335,7 @@ public final class TikTokMobsPlugin extends JavaPlugin implements Listener {
             likeGoalBar.start();
         }
 
-        // El reloj del formato. Sin bloque 'fases:' queda apagado y todo sigue igual.
-        phasePlan = new dev.juanse.tiktokmobs.core.PhasePlan(
-                settings.mapping().fases(), settings.mapping().fasesCiclicas());
-        phasePlan.iniciar(System.currentTimeMillis());
-        if (phasePlan.activo()) {
-            phaseBar = new PhaseBar(this, phasePlan);
-            phaseBar.start();
-            phaseTask = getServer().getScheduler().runTaskTimer(this, this::tickFases, 20L, 20L);
-            anunciarFase(phasePlan.actual());
-        }
+        arrancarFases(settings.mapping());
 
         // La mision del streamer: lo unico del directo que no mueve el publico.
         if (resolver.mision("main").activa()) {

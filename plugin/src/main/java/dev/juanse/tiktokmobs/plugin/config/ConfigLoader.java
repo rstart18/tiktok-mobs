@@ -174,7 +174,7 @@ public final class ConfigLoader {
         return List.copyOf(sources);
     }
 
-    private static MappingTable mapping(FileConfiguration cfg, Logger log) {
+    private static MappingTable mapping(ConfigurationSection cfg, Logger log) {
         MappingTable.Builder builder = MappingTable.builder()
                 .likeEvery(cfg.getInt("likes.every", 100))
                 .likeGoal(cfg.getInt("likes.goal", 0))
@@ -187,7 +187,8 @@ public final class ConfigLoader {
                 .misionEscalada(cfg.getInt("mision.escalada", 0))
                 .misionVidas(cfg.getInt("mision.vidas", 3))
                 .fases(leerFases(cfg, log))
-                .fasesCiclicas(cfg.getBoolean("fases.ciclico", false));
+                .fasesCiclicas(cfg.getBoolean("fases.ciclico", false))
+                .protegerBloques(cfg.getBoolean("proteger-bloques", true));
 
         ConfigurationSection gifts = cfg.getConfigurationSection("gifts");
         if (gifts != null) {
@@ -449,6 +450,44 @@ public final class ConfigLoader {
             log.info("[fases] " + out.size() + " fase(s): " + sb);
         }
         return out;
+    }
+
+
+    // ------------------------------------------------------------------ modos
+
+    /**
+     * Los catalogos con nombre del bloque {@code modos:}.
+     *
+     * <p>El catalogo de arriba del archivo sigue siendo el de siempre y no se toca: los
+     * modos son <b>catalogos extra</b> que se activan a mano. Asi un config que ya
+     * funcionaba sigue funcionando igual aunque nunca uses esto.
+     */
+    public static java.util.Set<String> modos(FileConfiguration cfg) {
+        ConfigurationSection sec = cfg.getConfigurationSection("modos");
+        return sec == null ? java.util.Set.of() : sec.getKeys(false);
+    }
+
+    /**
+     * Construye el catalogo de un modo.
+     *
+     * <p><b>Un modo es autocontenido</b>: lo que no declare usa los valores por defecto, no
+     * los de arriba del archivo. Es mas facil de explicar y de depurar que una herencia
+     * parcial, y de todas formas un modo distinto suele querer otras metas y otras fases.
+     *
+     * @return el catalogo, o null si ese modo no existe.
+     */
+    public static MappingTable modo(FileConfiguration cfg, String nombre, Logger log) {
+        if (nombre == null || nombre.isBlank()) return null;
+        ConfigurationSection sec = cfg.getConfigurationSection("modos." + nombre.trim());
+        if (sec == null) return null;
+
+        PANEL.remove();   // el panel escribe sobre el catalogo base, no sobre los modos
+        MappingTable tabla = mapping(sec, log);
+        log.info("[modo] '" + nombre.trim() + "' cargado: "
+                + tabla.byGiftId().size() + " por id, "
+                + tabla.byGiftName().size() + " por nombre, "
+                + tabla.fases().size() + " fase(s)");
+        return tabla;
     }
 
 }

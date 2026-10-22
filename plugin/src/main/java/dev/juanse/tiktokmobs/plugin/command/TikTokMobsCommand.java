@@ -24,7 +24,7 @@ public final class TikTokMobsCommand implements CommandExecutor, TabCompleter {
     private static final List<String> SUBCOMMANDS = List.of(
             "status", "reload", "connect", "disconnect", "target", "overlay", "gifts", "sources",
             "test", "testboss", "likes", "follow", "share", "raw", "clear", "reset", "coins",
-            "fase");
+            "fase", "modo");
 
     private final TikTokMobsPlugin plugin;
 
@@ -86,6 +86,7 @@ public final class TikTokMobsCommand implements CommandExecutor, TabCompleter {
             }
             case "target" -> target(sender, args);
             case "fase" -> fase(sender, args);
+            case "modo" -> modo(sender, args);
             case "test" -> test(sender, args);
             case "testboss" -> testBoss(sender, args);
             case "likes" -> {
@@ -173,6 +174,35 @@ public final class TikTokMobsCommand implements CommandExecutor, TabCompleter {
             return;
         }
         sender.sendMessage(Messages.color("&7Objetivo actual: &f" + plugin.targetDescription()));
+    }
+
+    /** Cambia de catalogo en caliente, o lista los que hay. */
+    private void modo(CommandSender sender, String[] args) {
+        var disponibles = plugin.modosDisponibles();
+
+        if (args.length < 2) {
+            sender.sendMessage(Messages.color("&6Modo activo: &f" + plugin.modoActivo()));
+            if (disponibles.isEmpty()) {
+                sender.sendMessage(Messages.color(
+                        "&7No hay modos extra. Anade un bloque &fmodos&7 al config.yml."));
+            } else {
+                sender.sendMessage(Messages.color("&7Disponibles: &fnormal&7, &f"
+                        + String.join("&7, &f", disponibles)));
+            }
+            sender.sendMessage(Messages.color("&7/ttmobs modo <nombre>"));
+            return;
+        }
+
+        String pedido = args[1];
+        if (plugin.cambiarModo(pedido)) {
+            sender.sendMessage(Messages.color("&aModo cambiado a &f" + plugin.modoActivo()));
+            sender.sendMessage(Messages.color(
+                    "&7El marcador y el caos siguen donde estaban; solo cambia el catalogo."));
+        } else {
+            sender.sendMessage(Messages.color("&cNo existe el modo '" + pedido + "'."));
+            sender.sendMessage(Messages.color("&7Hay: &fnormal&7, &f"
+                    + String.join("&7, &f", disponibles)));
+        }
     }
 
     /**
@@ -297,6 +327,12 @@ public final class TikTokMobsCommand implements CommandExecutor, TabCompleter {
         }
         if (args.length == 2 && args[0].equalsIgnoreCase("target")) {
             return partial(List.of("here", "clear"), args[1]);
+        }
+        if (args.length == 2 && args[0].equalsIgnoreCase("modo")) {
+            java.util.List<String> todos = new ArrayList<>();
+            todos.add("normal");
+            todos.addAll(plugin.modosDisponibles());
+            return partial(todos, args[1]);
         }
         if (args.length == 2 && args[0].equalsIgnoreCase("fase")) {
             return partial(List.of("siguiente"), args[1]);

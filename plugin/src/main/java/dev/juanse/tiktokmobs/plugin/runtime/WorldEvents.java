@@ -51,7 +51,7 @@ public final class WorldEvents {
     public static final Set<String> AVAILABLE = Set.of(
             "tnt_rain", "random_loot", "night", "day", "thunder", "heal", "swarm_bats",
             "rayo", "water_drop", "ruleta",
-            "nether", "suelo_lava", "ruleta_rusa", "taladro", "vida_extra", "horda");
+            "nether", "suelo_lava", "ruleta_rusa", "taladro", "vida_extra", "horda", "tnt");
 
     /**
      * Alcance de un evento de mundo:
@@ -86,7 +86,8 @@ public final class WorldEvents {
             Map.entry("ruleta_rusa", Scope.LOCAL),
             Map.entry("taladro", Scope.LOCAL),
             Map.entry("vida_extra", Scope.LOCAL),
-            Map.entry("horda", Scope.LOCAL));
+            Map.entry("horda", Scope.LOCAL),
+            Map.entry("tnt", Scope.GLOBAL));
 
     /** Alcance declarado del evento, o LOCAL si no esta en la tabla (lo mas seguro). */
     public static Scope scopeOf(String id) {
@@ -159,6 +160,15 @@ public final class WorldEvents {
                     tnt.setFuseTicks(60 + RANDOM.nextInt(40));
                     registry.track(streamerId, tnt);
                 }
+            }
+            case "tnt" -> {
+                // UNA. La lluvia de ocho es para un premio gordo; para "cada 1000 likes cae
+                // una TNT" hace falta el goteo, no el diluvio.
+                TNTPrimed tnt = world.spawn(at.clone().add(offset(3), 10, offset(3)),
+                        TNTPrimed.class);
+                tnt.setFuseTicks(60);
+                registry.track(streamerId, tnt);
+                anunciar("&c&l\u2620 UNA TNT");
             }
             case "random_loot" -> {
                 for (int i = 0; i < 4; i++) {
