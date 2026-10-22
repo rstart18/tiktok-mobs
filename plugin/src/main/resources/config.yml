@@ -568,7 +568,6 @@ tiers:
     action: world_event
     event: tnt_rain
     message: "&c%donor% solto lluvia de TNT"
-    message: "&c%donor% solto lluvia de TNT"
 
   - max-coins: 999999
     action: boss
