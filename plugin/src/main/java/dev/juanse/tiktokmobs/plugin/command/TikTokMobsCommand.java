@@ -23,7 +23,8 @@ public final class TikTokMobsCommand implements CommandExecutor, TabCompleter {
 
     private static final List<String> SUBCOMMANDS = List.of(
             "status", "reload", "connect", "disconnect", "target", "overlay", "gifts", "sources",
-            "test", "testboss", "likes", "follow", "share", "raw", "clear", "reset", "coins");
+            "test", "testboss", "likes", "follow", "share", "raw", "clear", "reset", "coins",
+            "fase");
 
     private final TikTokMobsPlugin plugin;
 
@@ -84,6 +85,7 @@ public final class TikTokMobsCommand implements CommandExecutor, TabCompleter {
                 sender.sendMessage(Messages.color("&7(solo el contador: no spawnea nada)"));
             }
             case "target" -> target(sender, args);
+            case "fase" -> fase(sender, args);
             case "test" -> test(sender, args);
             case "testboss" -> testBoss(sender, args);
             case "likes" -> {
@@ -173,6 +175,45 @@ public final class TikTokMobsCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(Messages.color("&7Objetivo actual: &f" + plugin.targetDescription()));
     }
 
+    /**
+     * El estado del formato, y el salto a mano.
+     *
+     * <p>El salto existe porque en directo el reloj nunca cuadra con lo que esta pasando:
+     * si la ronda se pone buena la alargas, y si se muere la cortas.
+     */
+    private void fase(CommandSender sender, String[] args) {
+        var plan = plugin.phasePlan();
+
+        if (args.length >= 2 && args[1].equalsIgnoreCase("siguiente")) {
+            if (!plan.activo()) {
+                sender.sendMessage(Messages.color("&cNo hay formato configurado (bloque 'fases')."));
+                return;
+            }
+            plugin.saltarFase();
+            return;
+        }
+
+        if (!plan.activo()) {
+            sender.sendMessage(Messages.color(
+                    "&7Sin formato. Las donaciones pasan todas, como siempre."));
+            sender.sendMessage(Messages.color(
+                    "&7Para activarlo, anade un bloque &ffases&7 al config.yml."));
+            return;
+        }
+
+        var actual = plan.actual();
+        int restan = plan.restantes(System.currentTimeMillis());
+        sender.sendMessage(Messages.color("&6Fase: &f" + actual.nombre()
+                + (restan < 0 ? " &7(sin limite)" : " &7(" + restan + "s)")));
+        sender.sendMessage(Messages.color("&6Donaciones: "
+                + (actual.donaciones() ? "&aABIERTAS" : "&cCERRADAS")));
+        sender.sendMessage(Messages.color("&6Retenidas: &f" + plugin.retenidas()
+                + " &7(caen al abrir la fase)"));
+        sender.sendMessage(Messages.color("&7Plan: &f" + plan.fases().size()
+                + " fase(s)" + (plan.ciclico() ? ", ciclico" : ", una vuelta")));
+        sender.sendMessage(Messages.color("&7/ttmobs fase siguiente &8- saltar ahora"));
+    }
+
     private void test(CommandSender sender, String[] args) {
         if (args.length < 2) {
             sender.sendMessage(Messages.color("&7Uso: &f/ttmobs test <regalo> [cantidad] [monedas]"));
@@ -256,6 +297,9 @@ public final class TikTokMobsCommand implements CommandExecutor, TabCompleter {
         }
         if (args.length == 2 && args[0].equalsIgnoreCase("target")) {
             return partial(List.of("here", "clear"), args[1]);
+        }
+        if (args.length == 2 && args[0].equalsIgnoreCase("fase")) {
+            return partial(List.of("siguiente"), args[1]);
         }
         if (args.length == 2 && args[0].equalsIgnoreCase("test")) {
             return partial(List.of("Rose", "Finger Heart", "TikTok", "Galaxy", "Lion"), args[1]);

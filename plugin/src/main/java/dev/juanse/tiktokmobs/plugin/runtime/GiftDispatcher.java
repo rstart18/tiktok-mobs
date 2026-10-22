@@ -31,6 +31,25 @@ public final class GiftDispatcher {
     private final JavaPlugin plugin;
     private final ActionResolver resolver;
     private final ActionExecutor executor;
+
+    /**
+     * Si las donaciones disparan ahora mismo. Es un supplier y no un booleano porque el
+     * plan de fases se reconstruye en cada /ttmobs reload: leerlo en cada tick hace que el
+     * dispatcher siga al recargado en vez de quedarse con el plan viejo.
+     */
+    private volatile java.util.function.BooleanSupplier donacionesActivas = () -> true;
+
+    /**
+     * Lo que llego mientras las donaciones estaban cerradas.
+     *
+     * <p>No se descarta: se retiene y cae de golpe cuando la fase se abre. Si se descartara,
+     * quien dono durante la fase de construir habria pagado por nada, y eso se nota en el
+     * chat a la primera.
+     */
+    private final java.util.Deque<ResolvedAction> retenidas = new java.util.ArrayDeque<>();
+
+    /** Techo de la retencion. Diez minutos de chat generoso no pueden tumbar el tick. */
+    private static final int MAX_RETENIDAS = 100;
     private final BlockingQueue<Incoming> queue;
 
     /** Un evento con la etiqueta del live del que vino. */
@@ -93,6 +112,17 @@ public final class GiftDispatcher {
         task = Bukkit.getScheduler().runTaskTimer(plugin, this::tick, 1L, 1L);
     }
 
+    public void setDonacionesActivas(java.util.function.BooleanSupplier value) {
+        this.donacionesActivas = value == null ? () -> true : value;
+    }
+
+    /** Cuantas acciones esperan a que se abra la fase. Lo usa el comando. */
+    public int retenidas() {
+        synchronized (retenidas) {
+            return retenidas.size();
+        }
+    }
+
     public void stop() {
         if (task != null) {
             task.cancel();
@@ -108,6 +138,26 @@ public final class GiftDispatcher {
         // En modo degradado seguimos vaciando la cola (para que no se atasque) pero el
         // executor convierte las acciones caras en un simple aviso.
         int budget = degraded ? 1 : maxActionsPerTick;
+
+        boolean abiertas = donacionesActivas.getAsBoolean();
+
+        // Lo retenido va antes que lo nuevo, y respetando el mismo presupuesto por tick:
+        // abrir la fase no puede significar cien explosiones en el mismo instante.
+        if (abiertas) {
+            for (int i = 0; i < budget; i++) {
+                ResolvedAction pendiente;
+                synchronized (retenidas) {
+                    pendiente = retenidas.pollFirst();
+                }
+                if (pendiente == null) break;
+                try {
+                    executor.execute(pendiente);
+                    executed.incrementAndGet();
+                } catch (RuntimeException ex) {
+                    plugin.getLogger().warning("accion retenida fallo: " + ex);
+                }
+            }
+        }
 
         for (int i = 0; i < budget; i++) {
             Incoming incoming = queue.poll();
@@ -179,6 +229,19 @@ public final class GiftDispatcher {
                             incoming.streamerId());
                 }
                 plugin.getLogger().info("[likes] meta '" + meta.label() + "' x" + metasDeLikes);
+            }
+
+            if (!abiertas) {
+                // Fase cerrada: se guardan para cuando abra. El marcador y el nivel de caos
+                // ya se apuntaron arriba, asi que el publico ve su donacion contar aunque
+                // el efecto llegue despues.
+                synchronized (retenidas) {
+                    for (ResolvedAction action : actions) {
+                        if (retenidas.size() >= MAX_RETENIDAS) break;
+                        retenidas.addLast(action);
+                    }
+                }
+                continue;
             }
 
             for (ResolvedAction action : actions) {

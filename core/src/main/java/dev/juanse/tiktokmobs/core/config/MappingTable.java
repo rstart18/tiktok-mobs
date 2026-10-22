@@ -45,6 +45,8 @@ public final class MappingTable {
     private final String misionBloques;
     private final int misionEscalada;
     private final int misionVidas;
+    private final java.util.List<dev.juanse.tiktokmobs.core.PhasePlan.Fase> fases;
+    private final boolean fasesCiclicas;
     private final int donationGoalCoins;
     private final ActionSpec goalReward;
 
@@ -67,6 +69,8 @@ public final class MappingTable {
         this.misionBloques = b.misionBloques;
         this.misionEscalada = Math.max(0, b.misionEscalada);
         this.misionVidas = Math.max(0, b.misionVidas);
+        this.fases = java.util.List.copyOf(b.fases);
+        this.fasesCiclicas = b.fasesCiclicas;
         this.donationGoalCoins = Math.max(0, b.donationGoalCoins);
         this.goalReward = b.goalReward == null ? ActionSpec.NONE : b.goalReward;
     }
@@ -157,6 +161,15 @@ public final class MappingTable {
         return misionVidas;
     }
 
+    /** Las fases del formato. Vacia = sin formato, las donaciones siempre pasan. */
+    public java.util.List<dev.juanse.tiktokmobs.core.PhasePlan.Fase> fases() {
+        return fases;
+    }
+
+    public boolean fasesCiclicas() {
+        return fasesCiclicas;
+    }
+
     public int likeEvery() {
         return likeEvery;
     }
@@ -223,6 +236,9 @@ public final class MappingTable {
         private String misionBloques = "DIAMOND_ORE,DEEPSLATE_DIAMOND_ORE";
         private int misionEscalada = 0;
         private int misionVidas = 3;
+        private java.util.List<dev.juanse.tiktokmobs.core.PhasePlan.Fase> fases =
+                java.util.List.of();
+        private boolean fasesCiclicas = false;
         private int donationGoalCoins = 0;
         private ActionSpec goalReward = ActionSpec.NONE;
 
@@ -283,6 +299,16 @@ public final class MappingTable {
 
         public Builder misionBloques(String value) {
             if (value != null && !value.isBlank()) this.misionBloques = value.trim();
+            return this;
+        }
+
+        public Builder fases(java.util.List<dev.juanse.tiktokmobs.core.PhasePlan.Fase> value) {
+            this.fases = value == null ? java.util.List.of() : java.util.List.copyOf(value);
+            return this;
+        }
+
+        public Builder fasesCiclicas(boolean value) {
+            this.fasesCiclicas = value;
             return this;
         }
 

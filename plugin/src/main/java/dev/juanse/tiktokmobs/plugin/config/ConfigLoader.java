@@ -185,7 +185,9 @@ public final class ConfigLoader {
                 .misionBloques(cfg.getString("mision.bloques",
                         "DIAMOND_ORE,DEEPSLATE_DIAMOND_ORE"))
                 .misionEscalada(cfg.getInt("mision.escalada", 0))
-                .misionVidas(cfg.getInt("mision.vidas", 3));
+                .misionVidas(cfg.getInt("mision.vidas", 3))
+                .fases(leerFases(cfg, log))
+                .fasesCiclicas(cfg.getBoolean("fases.ciclico", false));
 
         ConfigurationSection gifts = cfg.getConfigurationSection("gifts");
         if (gifts != null) {
@@ -414,4 +416,39 @@ public final class ConfigLoader {
             return fallback;
         }
     }
+
+    /**
+     * Las fases del formato. Sin bloque {@code fases:} la lista queda vacia y el plugin se
+     * comporta como siempre: las donaciones pasan todas, sin reloj.
+     */
+    private static java.util.List<dev.juanse.tiktokmobs.core.PhasePlan.Fase> leerFases(
+            ConfigurationSection cfg, java.util.logging.Logger log) {
+
+        java.util.List<?> crudas = cfg.getList("fases.lista");
+        if (crudas == null || crudas.isEmpty()) return java.util.List.of();
+
+        java.util.List<dev.juanse.tiktokmobs.core.PhasePlan.Fase> out = new java.util.ArrayList<>();
+        for (Object cruda : crudas) {
+            if (!(cruda instanceof java.util.Map<?, ?> mapa)) continue;
+            Object nombre = mapa.get("nombre");
+            Object segundos = mapa.get("segundos");
+            Object donaciones = mapa.get("donaciones");
+            out.add(new dev.juanse.tiktokmobs.core.PhasePlan.Fase(
+                    nombre == null ? "FASE" : String.valueOf(nombre),
+                    segundos instanceof Number n ? n.intValue() : 0,
+                    !(donaciones instanceof Boolean b) || b));
+        }
+        if (log != null && !out.isEmpty()) {
+            StringBuilder sb = new StringBuilder();
+            for (var f : out) {
+                if (sb.length() > 0) sb.append(" -> ");
+                sb.append(f.nombre()).append('(')
+                  .append(f.infinita() ? "sin limite" : f.segundos() + "s")
+                  .append(f.donaciones() ? ", donaciones ON" : ", donaciones OFF").append(')');
+            }
+            log.info("[fases] " + out.size() + " fase(s): " + sb);
+        }
+        return out;
+    }
+
 }

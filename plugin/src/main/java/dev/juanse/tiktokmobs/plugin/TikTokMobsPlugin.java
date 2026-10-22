@@ -29,6 +29,7 @@ import dev.juanse.tiktokmobs.plugin.ui.GoalBar;
 import dev.juanse.tiktokmobs.plugin.ui.LifeBar;
 import dev.juanse.tiktokmobs.plugin.ui.LikeGoalBar;
 import dev.juanse.tiktokmobs.plugin.ui.MissionBar;
+import dev.juanse.tiktokmobs.plugin.ui.PhaseBar;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.command.PluginCommand;
@@ -69,6 +70,10 @@ public final class TikTokMobsPlugin extends JavaPlugin implements Listener {
     private LifeBar lifeBar;
     private LikeGoalBar likeGoalBar;
     private MissionBar missionBar;
+    private PhaseBar phaseBar;
+    private dev.juanse.tiktokmobs.core.PhasePlan phasePlan =
+            dev.juanse.tiktokmobs.core.PhasePlan.apagado();
+    private org.bukkit.scheduler.BukkitTask phaseTask;
     private DonorBoard donorBoard;
 
     private LedgerStore ledgerStore;
@@ -108,6 +113,7 @@ public final class TikTokMobsPlugin extends JavaPlugin implements Listener {
         getServer().getPluginManager().registerEvents(
                 new dev.juanse.tiktokmobs.plugin.runtime.LifeListener(
                         this, targets, spawnRegistry, id -> resolver.vidas(id)), this);
+        dispatcher.setDonacionesActivas(() -> phasePlan.donacionesActivas());
         dev.juanse.tiktokmobs.plugin.runtime.WorldEvents.setDarVida(
                 streamerId -> resolver.vidas(streamerId).ganar());
         // La mision cuenta bloques picados, no objetos: una donacion no puede minar por ti.
@@ -148,6 +154,45 @@ public final class TikTokMobsPlugin extends JavaPlugin implements Listener {
             out.add(material);
         }
         return out;
+    }
+
+    /** Hace avanzar el reloj del formato y anuncia el cambio una sola vez. */
+    private void tickFases() {
+        var nueva = phasePlan.avanzarSiToca(System.currentTimeMillis());
+        if (nueva != null) anunciarFase(nueva);
+    }
+
+    /**
+     * El cambio de fase tiene que verse y oirse. Es el momento en que el publico pasa de
+     * mirar a romper (o al reves), y si no se anuncia nadie se entera de que le toca.
+     */
+    private void anunciarFase(dev.juanse.tiktokmobs.core.PhasePlan.Fase fase) {
+        if (fase == null) return;
+
+        String aviso = fase.donaciones()
+                ? "&c&l\u25b6 " + fase.nombre() + " &7- las donaciones estan ABIERTAS"
+                : "&a&l\u25b6 " + fase.nombre() + " &7- donaciones cerradas, a construir";
+        for (var player : getServer().getOnlinePlayers()) {
+            player.sendMessage(dev.juanse.tiktokmobs.plugin.runtime.Messages.color(aviso));
+            dev.juanse.tiktokmobs.plugin.ui.Anim.tituloOnda(this, player, fase.nombre(),
+                    fase.donaciones() ? "donaciones abiertas" : "donaciones cerradas");
+        }
+        getLogger().info("[fases] " + fase.nombre()
+                + (fase.donaciones() ? " (donaciones ON)" : " (donaciones OFF)"));
+    }
+
+    /** Lo usa el comando /ttmobs fase. */
+    public dev.juanse.tiktokmobs.core.PhasePlan phasePlan() {
+        return phasePlan;
+    }
+
+    /** Acciones esperando a que se abra la fase. */
+    public int retenidas() {
+        return dispatcher == null ? 0 : dispatcher.retenidas();
+    }
+
+    public void saltarFase() {
+        anunciarFase(phasePlan.siguiente(System.currentTimeMillis()));
     }
 
     private void bootstrap() {
@@ -216,6 +261,17 @@ public final class TikTokMobsPlugin extends JavaPlugin implements Listener {
         if (resolver.likeGoal("main").activa()) {
             likeGoalBar = new LikeGoalBar(this, resolver.likeGoal("main"), resolver.likes("main"));
             likeGoalBar.start();
+        }
+
+        // El reloj del formato. Sin bloque 'fases:' queda apagado y todo sigue igual.
+        phasePlan = new dev.juanse.tiktokmobs.core.PhasePlan(
+                settings.mapping().fases(), settings.mapping().fasesCiclicas());
+        phasePlan.iniciar(System.currentTimeMillis());
+        if (phasePlan.activo()) {
+            phaseBar = new PhaseBar(this, phasePlan);
+            phaseBar.start();
+            phaseTask = getServer().getScheduler().runTaskTimer(this, this::tickFases, 20L, 20L);
+            anunciarFase(phasePlan.actual());
         }
 
         // La mision del streamer: lo unico del directo que no mueve el publico.
@@ -322,12 +378,18 @@ public final class TikTokMobsPlugin extends JavaPlugin implements Listener {
         if (lifeBar != null) lifeBar.stop();
         if (likeGoalBar != null) likeGoalBar.stop();
         if (missionBar != null) missionBar.stop();
+        if (phaseBar != null) phaseBar.stop();
+        if (phaseTask != null) {
+            phaseTask.cancel();
+            phaseTask = null;
+        }
         if (donorBoard != null) donorBoard.stop();
         stopOverlay();
         goalBar = null;
         lifeBar = null;
         likeGoalBar = null;
         missionBar = null;
+        phaseBar = null;
         donorBoard = null;
     }
 
@@ -389,6 +451,7 @@ public final class TikTokMobsPlugin extends JavaPlugin implements Listener {
         if (lifeBar != null) lifeBar.showTo(event.getPlayer());
         if (likeGoalBar != null) likeGoalBar.showTo(event.getPlayer());
         if (missionBar != null) missionBar.showTo(event.getPlayer());
+        if (phaseBar != null) phaseBar.showTo(event.getPlayer());
         if (donorBoard != null) donorBoard.showTo(event.getPlayer());
         if (bossTracker != null) bossTracker.showAllTo(event.getPlayer());
         if (bossManager != null) bossManager.showTo(event.getPlayer());
